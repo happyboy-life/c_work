@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>二手图书借阅平台 - 图书列表</title>
+    <style>
+        /* 基础样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+            font-size: 14px;
+            color: #333;
+        }
+        /* Toast提示 */
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            background-color: rgba(0,0,0,0.7);
+            color: #fff;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            display: none;
+        }
+
+        /* ========== 图书列表页样式 ========== */
+        .header {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            z-index: 99;
+            gap: 8px;
+        }
+        .user-avatar-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            cursor: pointer;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .user-avatar-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .search-icon-wrap {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        .search-icon-wrap:hover {
+            background-color: #f5f5f5;
+        }
+        .search-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+        .search-input {
+            flex: 1;
+            height: 36px;
+            line-height: 36px;
+            padding: 0 12px;
+            border: 1px solid #eee;
+            border-radius: 18px;
+            background-color: #f8f8f8;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .search-input:focus {
+            border-color: #0088ff;
+            background-color: #fff;
+            box-shadow: 0 0 0 2px rgba(0, 136, 255, 0.1);
+        }
+        .search-input::placeholder {
+            color: #999;
+        }
+        /* 搜索历史样式 */
+        .search-history {
+            position: absolute;
+            top: 56px;
+            left: 15px;
+            right: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 10px;
+            z-index: 98;
+            display: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .search-history.show {
+            display: block;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 8px;
+        }
+        .history-title {
+            font-size: 13px;
+            color: #999;
+        }
+        .clear-history {
+            font-size: 12px;
+            color: #0088ff;
+            cursor: pointer;
+        }
+        .history-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .history-item {
+            padding: 6px 12px;
+            background-color: #f5f5f5;
+            border-radius: 16px;
+            font-size: 13px;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .history-item:hover {
+            background-color: #eee;
+        }
+        .delete-history {
+            font-size: 10px;
+            color: #999;
+            cursor: pointer;
+        }
+        .delete-history:hover {
+            color: #ff4400;
+        }
+        .category {
+            display: flex;
+            padding: 10px 15px;
+            background-color: #fff;
+            overflow-x: auto;
+            white-space: nowrap;
+            border-bottom: 1px solid #eee;
+        }
+        .category .item {
+            padding: 5px 10px;
+            margin-right: 10px;
+            color: #666;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .category .item.active {
+            background-color: #0088ff;
+            color: #fff;
+        }
+        .goods-list {
+            padding: 10px 15px;
+        }
+        .goods-item {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: box-shadow 0.2s;
+            display: flex;
+            gap: 12px;
+        }
+        .goods-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .book-cover {
+            width: 80px;
+            height: 110px;
+            border-radius: 4px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background-color: #f0f0f0;
+        }
+        .book-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .book-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .book-name {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .book-author {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .book-category {
+            font-size: 12px;
+            color: #0088ff;
+            margin-bottom: 4px;
+            display: inline-block;
+            background-color: #e6f7ff;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .book-condition {
+            font-size: 12px;
+            color: #ff6600;
+            margin-bottom: 4px;
+        }
+        .book-price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+        }
+        .book-price {
+            color: #ff4400;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .book-stock {
+            font-size: 12px;
+            color: #999;
+        }
+        .loading-tip {
+            text-align:center; 
+            padding:20px; 
+            color:#999;
+        }
+
+        /* ========== 底部Tab栏样式 ========== */
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            background-color: #fff;
+            border-top: 1px solid #eee;
+            padding: 5px 0;
+        }
+        .tab-bar .tab-item {
+            flex: 1;
+            text-align: center;
+            cursor: pointer;
+        }
+        .tab-bar .tab-item .icon {
+            font-size: 20px;
+            margin-bottom: 3px;
+            display: block;
+        }
+        .tab-bar .tab-item .text {
+            font-size: 12px;
+            color: #666;
+        }
+        .tab-bar .tab-item.active .text {
+            color: #0088ff;
+        }
+        .container {
+            padding-bottom: 60px;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <!-- 图书展示页面主体 -->
+    <div class="container">
+        <!-- 顶部搜索栏 -->
+        <div class="header">
+            <div class="user-avatar-btn" id="userAvatarBtn">
+                <span id="avatarText">头</span>
+            </div>
+            <div class="search-icon-wrap" id="searchBtn">
+                <svg class="search-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M909.6 854.5L649.9 594.8C690.2 542.7 712 479 712 412c0-80.2-31.3-155.4-87.9-212.1-56.6-56.7-132-87.9-212.1-87.9s-155.5 31.3-212.1 87.9C143.2 256.5 112 331.8 112 412c0 80.1 31.3 155.5 87.9 212.1C256.5 680.8 331.8 712 412 712c67 0 130.6-21.8 182.7-62l259.7 259.6a8.2 8.2 0 0 0 11.6 0l43.6-43.5a8.2 8.2 0 0 0 0-11.6zM570.4 570.4C528 612.7 471.8 636 412 636s-116-23.3-158.4-65.6C205.3 528 182 471.8 182 412s23.3-116.1 65.6-158.4C296 205.3 352.2 182 412 182s116.1 23.3 158.4 65.6S636 352.2 636 412s-23.2 116.1-65.6 158.4z" fill="#666"/>
+                </svg>
+            </div>
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索书名、作者">
+        </div>
+
+        <!-- 搜索历史容器 -->
+        <div class="search-history" id="searchHistory">
+            <div class="history-header">
+                <div class="history-title">搜索历史</div>
+                <div class="clear-history" id="clearHistory">清空</div>
+            </div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+
+        <!-- 分类筛选栏 -->
+        <div class="category">
+            <div class="item active" data-category="全部">全部</div>
+            <div class="item" data-category="文学小说">文学小说</div>
+            <div class="item" data-category="科学技术">科学技术</div>
+            <div class="item" data-category="人文社科">人文社科</div>
+            <div class="item" data-category="经济管理">经济管理</div>
+            <div class="item" data-category="教育考试">教育考试</div>
+            <div class="item" data-category="其他">其他</div>
+        </div>
+
+        <!-- 图书列表 -->
+        <div class="goods-list" id="goodsList">
+            <div class="loading-tip" id="loadingTip">加载中...</div>
+        </div>
+    </div>
+
+    <!-- 底部Tab栏 -->
+    <div class="tab-bar">
+        <div class="tab-item active" data-page="goods">
+            <span class="icon">📚</span>
+            <span class="text">图书</span>
+        </div>
+        <div class="tab-item" data-page="publish">
+            <span class="icon">📤</span>
+            <span class="text">发布</span>
+        </div>
+        <div class="tab-item" data-page="mine">
+            <span class="icon">👤</span>
+            <span class="text">我的</span>
+        </div>
+    </div>
+
+    <!-- 提示弹窗 -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ========== 核心配置 & 模拟数据 ==========
+        let currentCategory = '全部'; // 当前选中分类
+        const SEARCH_HISTORY_KEY = 'search_history_list';
+
+        // 模拟图书列表数据
+        const mockBooksList = [
+            {
+                id: 1,
+                name: '百年孤独',
+                author: '加西亚·马尔克斯',
+                category: '文学小说',
+                condition: '八成新',
+                price: 25.00,
+                stock: 3,
+                description: '魔幻现实主义文学代表作，讲述布恩迪亚家族七代人的传奇故事。',
+                seller_name: '书虫小李',
+                images: ['https://picsum.photos/200/280?random=1']
+            },
+            {
+                id: 2,
+                name: 'JavaScript高级程序设计（第4版）',
+                author: '马特·弗里斯比',
+                category: '科学技术',
+                condition: '九成新',
+                price: 55.00,
+                stock: 2,
+                description: '前端开发必备经典书籍，全面讲解JavaScript语言核心特性。',
+                seller_name: '程序员小王',
+                images: ['https://picsum.photos/200/280?random=2']
+            },
+            {
+                id: 3,
+                name: '人类简史',
+                author: '尤瓦尔·赫拉利',
+                category: '人文社科',
+                condition: '七成新',
+                price: 30.00,
+                stock: 1,
+                description: '从认知革命到科学革命，梳理人类历史发展脉络。',
+                seller_name: '历史爱好者',
+                images: ['https://picsum.photos/200/280?random=3']
+            },
+            {
+                id: 4,
+                name: '经济学原理',
+                author: '曼昆',
+                category: '经济管理',
+                condition: '八五成新',
+                price: 45.00,
+                stock: 5,
+                description: '经济学入门经典教材，通俗易懂地讲解微观和宏观经济学原理。',
+                seller_name: '经济学霸',
+                images: ['https://picsum.photos/200/280?random=4']
+            },
+            {
+                id: 5,
+                name: '高等数学（第七版）上册',
+                author: '同济大学数学系',
+                category: '教育考试',
+                condition: '六成新',
+                price: 15.00,
+                stock: 2,
+                description: '大学高数经典教材，适合考研复习使用。',
+                seller_name: '考研党',
+                images: ['https://picsum.photos/200/280?random=5']
+            },
+            {
+                id: 6,
+                name: '活着',
+                author: '余华',
+                category: '文学小说',
+                condition: '九成新',
+                price: 18.00,
+                stock: 4,
+                description: '讲述一个人一生的故事，展现生命的坚韧与力量。',
+                seller_name: '文艺青年',
+                images: ['https://picsum.photos/200/280?random=6']
+            }
+        ];
+
+        // ========== DOM元素缓存 ==========
+        const toast = document.getElementById('toast');
+        const goodsList = document.getElementById('goodsList');
+        const loadingTip = document.getElementById('loadingTip');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const categoryItems = document.querySelectorAll('.category .item');
+        const tabItems = document.querySelectorAll('.tab-bar .tab-item');
+        const userAvatarBtn = document.getElementById('userAvatarBtn');
+        const avatarText = document.getElementById('avatarText');
+        // 搜索历史相关元素
+        const searchHistory = document.getElementById('searchHistory');
+        const historyList = document.getElementById('historyList');
+        const clearHistory = document.getElementById('clearHistory');
+
+        // ========== 工具函数 ==========
+        function showToast(message, duration = 2000) {
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, duration);
+        }
+
+        function debounce(fn, delay = 300) {
+            let timer = null;
+            return function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    fn.apply(this, args);
+                }, delay);
+            };
+        }
+
+        // ========== 搜索历史管理函数 ==========
+        function getSearchHistory() {
+            const history = localStorage.getItem(SEARCH_HISTORY_KEY);
+            return history ? JSON.parse(history) : [];
+        }
+
+        function saveSearchHistory(keyword) {
+            if (!keyword.trim()) return;
+            let history = getSearchHistory();
+            history = history.filter(item => item !== keyword.trim());
+            history.unshift(keyword.trim());
+            if (history.length > 10) {
+                history = history.slice(0, 10);
+            }
+            localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+            renderSearchHistory();
+        }
+
+        function renderSearchHistory() {
+            const history = getSearchHistory();
+            historyList.innerHTML = '';
+            
+            if (history.length === 0) {
+                historyList.innerHTML = '<div style="font-size:13px;color:#999;padding:10px;text-align:center;">暂无搜索历史</div>';
+                return;
+            }
+
+            history.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                historyItem.innerHTML = `
+                    <span class="history-text">${item}</span>
+                    <span class="delete-history">×</span>
+                `;
+                historyList.appendChild(historyItem);
+
+                historyItem.querySelector('.history-text').addEventListener('click', () => {
+                    searchInput.value = item;
+                    renderGoodsList(item);
+                    searchHistory.classList.remove('show');
+                });
+
+                historyItem.querySelector('.delete-history').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const newHistory = history.filter(h => h !== item);
+                    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory));
+                    renderSearchHistory();
+                });
+            });
+        }
+
+        function clearAllSearchHistory() {
+            localStorage.removeItem(SEARCH_HISTORY_KEY);
+            renderSearchHistory();
+            showToast('已清空搜索历史');
+        }
+
+        // ========== 全局库存管理（与detail.html共享localStorage） ==========
+        function getGlobalInventory() {
+            const inv = localStorage.getItem('books_inventory');
+            return inv ? JSON.parse(inv) : {};
+        }
+
+        function setGlobalInventory(inventory) {
+            localStorage.setItem('books_inventory', JSON.stringify(inventory));
+        }
+
+        function getBookCurrentStock(bookId, defaultStock) {
+            const inv = getGlobalInventory();
+            if (inv.hasOwnProperty(bookId)) {
+                return inv[bookId];
+            }
+            inv[bookId] = defaultStock;
+            setGlobalInventory(inv);
+            return defaultStock;
+        }
+
+        // ========== 图书列表渲染函数 ==========
+        function renderGoodsList(keyword = '') {
+            loadingTip.style.display = 'block';
+            
+            setTimeout(() => {
+                try {
+                    let filteredBooks = [...mockBooksList];
+
+                    // 从localStorage同步真实库存，过滤零库存（已下架）
+                    filteredBooks = filteredBooks.filter(item => {
+                        item.stock = getBookCurrentStock(item.id, item.stock);
+                        return item.stock > 0;
+                    });
+                    
+                    // 分类筛选
+                    if (currentCategory !== '全部') {
+                        filteredBooks = filteredBooks.filter(item => item.category === currentCategory);
+                    }
+                    
+                    // 关键词搜索
+                    if (keyword.trim()) {
+                        const lowerKeyword = keyword.toLowerCase();
+                        filteredBooks = filteredBooks.filter(item => 
+                            item.name.toLowerCase().includes(lowerKeyword) ||
+                            item.author.toLowerCase().includes(lowerKeyword) ||
+                            item.category.toLowerCase().includes(lowerKeyword)
+                        );
+                        saveSearchHistory(keyword);
+                    }
+                    
+                    loadingTip.style.display = 'none';
+                    goodsList.innerHTML = '';
+                    
+                    if (filteredBooks.length === 0) {
+                        goodsList.innerHTML = '<div class="loading-tip">暂无相关图书</div>';
+                        return;
+                    }
+                    
+                    // 渲染图书列表
+                    filteredBooks.forEach(item => {
+                        const bookItem = document.createElement('div');
+                        bookItem.className = 'goods-item';
+                        bookItem.innerHTML = `
+                            <div class="book-cover">
+                                <img src="${item.images[0]}" alt="${item.name}">
+                            </div>
+                            <div class="book-info">
+                                <div class="book-name">${item.name}</div>
+                                <div class="book-author">作者：${item.author}</div>
+                                <span class="book-category">${item.category}</span>
+                                <div class="book-condition">折旧程度：${item.condition}</div>
+                                <div class="book-price-row">
+                                    <span class="book-price">¥${item.price.toFixed(2)}</span>
+                                    <span class="book-stock">剩余 ${item.stock} 本</span>
+                                </div>
+                            </div>
+                        `;
+                        goodsList.appendChild(bookItem);
+                        
+                        bookItem.addEventListener('click', () => {
+                            window.location.href = `detail.html?id=${item.id}`;
+                        });
+                    });
+                } catch (error) {
+                    loadingTip.style.display = 'none';
+                    console.error('渲染图书列表失败：', error);
+                    goodsList.innerHTML = '<div class="loading-tip">加载失败，请重试</div>';
+                    showToast('加载失败，请重试');
+                }
+            }, 300);
+        }
+
+        // ========== 搜索&分类逻辑 ==========
+        function initSearchAndCategory() {
+            categoryItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    categoryItems.forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    currentCategory = item.dataset.category;
+                    renderGoodsList(searchInput.value);
+                });
+            });
+
+            searchInput.addEventListener('focus', () => {
+                searchHistory.classList.add('show');
+                renderSearchHistory();
+            });
+
+            document.addEventListener('click', (e) => {
+                const target = e.target;
+                if (!searchInput.contains(target) && !searchHistory.contains(target) && !searchBtn.contains(target)) {
+                    searchHistory.classList.remove('show');
+                }
+            });
+
+            searchBtn.addEventListener('click', () => {
+                const keyword = searchInput.value.trim();
+                renderGoodsList(keyword);
+                searchHistory.classList.remove('show');
+            });
+
+            searchInput.addEventListener('keyup', debounce((e) => {
+                if (e.key === 'Enter') {
+                    const keyword = searchInput.value.trim();
+                    renderGoodsList(keyword);
+                    searchHistory.classList.remove('show');
+                }
+            }));
+
+            clearHistory.addEventListener('click', clearAllSearchHistory);
+        }
+
+        // ========== Tab栏跳转逻辑 ==========
+        function initTabBar() {
+            tabItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    const targetPage = item.dataset.page;
+                    switch(targetPage) {
+                        case 'goods':
+                            window.location.href = 'goods.html';
+                            break;
+                        case 'publish':
+                            window.location.href = 'publish.html';
+                            break;
+                        case 'mine':
+                            window.location.href = 'mine.html';
+                            break;
+                    }
+                });
+            });
+        }
+
+        // ========== 头像按钮逻辑 ==========
+        function getCurrentUser() {
+            const currentUserId = localStorage.getItem('currentUserId');
+            if (!currentUserId) return null;
+            const users = JSON.parse(localStorage.getItem('users') || '{}');
+            return users[currentUserId] ? { id: currentUserId, ...users[currentUserId] } : null;
+        }
+
+        function getUserProfile() {
+            const user = getCurrentUser();
+            if (!user) return null;
+            const profiles = JSON.parse(localStorage.getItem('profiles') || '{}');
+            return profiles[user.id] || null;
+        }
+
+        function initUserAvatar() {
+            const user = getCurrentUser();
+            const profile = getUserProfile();
+
+            // 根据登录状态显示头像
+            if (user && profile) {
+                // 已登录且有资料
+                if (profile.avatar) {
+                    userAvatarBtn.innerHTML = `<img src="${profile.avatar}" alt="头像">`;
+                } else if (profile.name) {
+                    avatarText.textContent = profile.name.charAt(0);
+                }
+            } else if (user) {
+                // 已登录但未完善资料
+                avatarText.textContent = '完';
+            } else {
+                // 未登录
+                avatarText.textContent = '登';
+            }
+
+            // 点击头像事件
+            userAvatarBtn.addEventListener('click', () => {
+                window.location.href = 'mine.html';
+            });
+        }
+
+        // ========== 页面初始化 ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            initUserAvatar();
+            initSearchAndCategory();
+            initTabBar();
+            renderGoodsList();
+            renderSearchHistory();
+        });
+    </script>
+</body>
+</html>

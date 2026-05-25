@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>二手图书借阅平台 - 发布图书</title>
+    <style>
+        /* 基础样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+            font-size: 14px;
+            color: #333;
+        }
+        /* Toast提示 */
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            background-color: rgba(0,0,0,0.7);
+            color: #fff;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            display: none;
+        }
+
+        /* ========== 发布页面样式 ========== */
+        .publish-page {
+            background-color: #f9f9f9;
+        }
+        .publish-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+        .publish-back {
+            font-size: 18px;
+            color: #333;
+            cursor: pointer;
+        }
+        .publish-submit-btn {
+            font-size: 15px;
+            color: #0088ff;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+        .publish-form-wrap {
+            padding: 15px;
+        }
+        .publish-img-upload {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .publish-img-item {
+            width: 80px;
+            height: 110px;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #fff;
+            border: 1px dashed #ddd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .publish-img-item.add {
+            font-size: 24px;
+            color: #999;
+            cursor: pointer;
+            position: relative;
+        }
+        .publish-img-item.has-img {
+            border: none;
+        }
+        .publish-img-item.has-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .publish-img-item .delete-img {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(255,0,0,0.8);
+            color: #fff;
+            border-radius: 50%;
+            font-size: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            display: none;
+        }
+        .publish-img-item.has-img:hover .delete-img {
+            display: flex;
+        }
+        #publishFileInput {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 80px;
+            height: 110px;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .publish-form-row {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+        }
+        .form-row-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .form-row-item:last-child {
+            border-bottom: none;
+        }
+        .form-label {
+            font-size: 14px;
+            color: #333;
+            min-width: 70px;
+        }
+        .form-value {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: #666;
+            flex: 1;
+        }
+        .form-value input, .form-value select, .form-value textarea {
+            border: none;
+            outline: none;
+            text-align: right;
+            font-size: 14px;
+            color: #333;
+            background: transparent;
+            padding: 2px 0;
+            width: 100%;
+        }
+        .form-value select {
+            appearance: none;
+            background: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpath fill='%23666' d='M0 0l6 6 6-6z'/%3E%3C/svg%3E") no-repeat right center;
+            padding-right: 15px;
+        }
+        .form-textarea {
+            width: 100%;
+            border: none;
+            outline: none;
+            resize: none;
+            font-size: 14px;
+            color: #333;
+            background: transparent;
+            min-height: 80px;
+            padding: 5px 0;
+            text-align: left;
+        }
+        .count-limit {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        /* ========== 底部Tab栏样式 ========== */
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            background-color: #fff;
+            border-top: 1px solid #eee;
+            padding: 5px 0;
+        }
+        .tab-bar .tab-item {
+            flex: 1;
+            text-align: center;
+            cursor: pointer;
+        }
+        .tab-bar .tab-item .icon {
+            font-size: 20px;
+            margin-bottom: 3px;
+            display: block;
+        }
+        .tab-bar .tab-item .text {
+            font-size: 12px;
+            color: #666;
+        }
+        .tab-bar .tab-item.active .text {
+            color: #0088ff;
+        }
+        .container {
+            padding-bottom: 60px;
+        }
+    </style>
+</head>
+<body class="publish-page">
+    <!-- 发布页面主体 -->
+    <div class="container">
+        <!-- 顶部栏 -->
+        <div class="publish-top-bar">
+            <div class="publish-back" id="publishBackBtn">←</div>
+            <div style="font-size: 16px; font-weight: bold;">发布图书</div>
+            <div class="publish-submit-btn" id="publishSubmitBtn">发布</div>
+        </div>
+
+        <!-- 表单主体 -->
+        <div class="publish-form-wrap">
+            <!-- 图片上传 -->
+            <div class="publish-img-upload">
+                <div class="publish-img-item has-img" id="previewImgItem" style="display: none;">
+                    <img src="" id="previewImg" alt="图书封面">
+                    <div class="delete-img" id="deleteImgBtn">×</div>
+                </div>
+                <div class="publish-img-item add" id="addImgBtn">
+                    +
+                    <input type="file" id="publishFileInput" accept="image/*">
+                </div>
+            </div>
+
+            <!-- 书名 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label">书名</div>
+                    <div class="form-value" style="width: 100%;">
+                        <input type="text" id="bookNameInput" placeholder="请输入书名" maxlength="50">
+                        <div class="count-limit" id="nameCount">0/50</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 作者 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label">作者</div>
+                    <div class="form-value">
+                        <input type="text" id="authorInput" placeholder="请输入作者">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分类 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label">分类</div>
+                    <div class="form-value">
+                        <select id="categorySelect">
+                            <option value="">请选择分类</option>
+                            <option value="文学小说">文学小说</option>
+                            <option value="科学技术">科学技术</option>
+                            <option value="人文社科">人文社科</option>
+                            <option value="经济管理">经济管理</option>
+                            <option value="教育考试">教育考试</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 价格与数量 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label">价格</div>
+                    <div class="form-value">
+                        <input type="number" id="priceInput" placeholder="请输入价格" step="0.01" min="0">
+                    </div>
+                </div>
+                <div class="form-row-item">
+                    <div class="form-label">数量</div>
+                    <div class="form-value">
+                        <input type="number" id="quantityInput" placeholder="请输入数量" min="1" value="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 折旧程度 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label">折旧程度</div>
+                    <div class="form-value">
+                        <select id="conditionSelect">
+                            <option value="">请选择折旧程度</option>
+                            <option value="全新">全新</option>
+                            <option value="九成新">九成新</option>
+                            <option value="八五成新">八五成新</option>
+                            <option value="八成新">八成新</option>
+                            <option value="七成新">七成新</option>
+                            <option value="六成新">六成新</option>
+                            <option value="五成新及以下">五成新及以下</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 简介 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label" style="align-self: flex-start; margin-top: 8px;">简介</div>
+                    <div class="form-value" style="width: 100%;">
+                        <textarea class="form-textarea" id="descriptionInput" placeholder="请输入图书简介，包括内容概要、适合人群等" maxlength="500"></textarea>
+                        <div class="count-limit" id="descCount">0/500</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 联系方式 -->
+            <div class="publish-form-row">
+                <div class="form-row-item">
+                    <div class="form-label">联系方式</div>
+                    <div class="form-value">
+                        <input type="tel" id="contactInput" placeholder="请输入手机号码/微信">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部Tab栏 -->
+    <div class="tab-bar">
+        <div class="tab-item" data-page="goods">
+            <span class="icon">📚</span>
+            <span class="text">图书</span>
+        </div>
+        <div class="tab-item active" data-page="publish">
+            <span class="icon">📤</span>
+            <span class="text">发布</span>
+        </div>
+        <div class="tab-item" data-page="mine">
+            <span class="icon">👤</span>
+            <span class="text">我的</span>
+        </div>
+    </div>
+
+    <!-- 提示弹窗 -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ========== 全局变量 ==========
+        let uploadedImage = null;
+        let isLogin = false;
+        let userInfo = null;
+
+        // ========== DOM元素缓存 ==========
+        const toast = document.getElementById('toast');
+        const publishBackBtn = document.getElementById('publishBackBtn');
+        const addImgBtn = document.getElementById('addImgBtn');
+        const publishFileInput = document.getElementById('publishFileInput');
+        const previewImgItem = document.getElementById('previewImgItem');
+        const previewImg = document.getElementById('previewImg');
+        const deleteImgBtn = document.getElementById('deleteImgBtn');
+        const bookNameInput = document.getElementById('bookNameInput');
+        const nameCount = document.getElementById('nameCount');
+        const authorInput = document.getElementById('authorInput');
+        const categorySelect = document.getElementById('categorySelect');
+        const priceInput = document.getElementById('priceInput');
+        const quantityInput = document.getElementById('quantityInput');
+        const conditionSelect = document.getElementById('conditionSelect');
+        const descriptionInput = document.getElementById('descriptionInput');
+        const descCount = document.getElementById('descCount');
+        const contactInput = document.getElementById('contactInput');
+        const publishSubmitBtn = document.getElementById('publishSubmitBtn');
+        const tabItems = document.querySelectorAll('.tab-bar .tab-item');
+
+        // ========== 工具函数 ==========
+        function showToast(message, duration = 2000) {
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, duration);
+        }
+
+        // 检查登录状态
+        function checkLoginStatus() {
+            const currentUserId = localStorage.getItem('currentUserId');
+            if (!currentUserId) return false;
+            
+            const users = JSON.parse(localStorage.getItem('users') || '{}');
+            if (users[currentUserId]) {
+                isLogin = true;
+                userInfo = { id: currentUserId, ...users[currentUserId] };
+                return true;
+            }
+            return false;
+        }
+
+        // 检查资料是否完善
+        function isProfileComplete() {
+            const user = checkLoginStatus() ? userInfo : null;
+            if (!user) return false;
+            return user.isProfileComplete === true;
+        }
+
+        // ========== 页面初始化 ==========
+        window.addEventListener('DOMContentLoaded', () => {
+            checkLoginStatus();
+            if (!isLogin) {
+                showToast('您可先完善图书信息，发布时需登录哦', 3000);
+            }
+        });
+
+        // ========== 图片上传逻辑 ==========
+        addImgBtn.addEventListener('click', () => {
+            publishFileInput.click();
+        });
+
+        publishFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+
+            uploadedImage = file;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                previewImg.src = event.target.result;
+                previewImgItem.style.display = 'flex';
+                addImgBtn.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 删除图片
+        deleteImgBtn.addEventListener('click', () => {
+            uploadedImage = null;
+            previewImgItem.style.display = 'none';
+            addImgBtn.style.display = 'flex';
+            publishFileInput.value = '';
+        });
+
+        // ========== 字数限制逻辑 ==========
+        bookNameInput.addEventListener('input', () => {
+            const len = bookNameInput.value.length;
+            nameCount.textContent = `${len}/50`;
+        });
+
+        descriptionInput.addEventListener('input', () => {
+            const len = descriptionInput.value.length;
+            descCount.textContent = `${len}/500`;
+        });
+
+        // ========== 返回按钮 ==========
+        publishBackBtn.addEventListener('click', () => {
+            window.location.href = 'goods.html';
+        });
+
+        // ========== 提交发布逻辑 ==========
+        publishSubmitBtn.addEventListener('click', () => {
+            // 校验登录状态
+            if (!checkLoginStatus()) {
+                showToast('请先登录后发布');
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1500);
+                return;
+            }
+
+            // 校验资料是否完善
+            if (!isProfileComplete()) {
+                showToast('请先完善个人资料');
+                setTimeout(() => {
+                    window.location.href = 'mydata.html';
+                }, 1500);
+                return;
+            }
+
+            // 表单验证
+            if (!uploadedImage) {
+                showToast('请上传图书封面');
+                return;
+            }
+            if (!bookNameInput.value.trim()) {
+                showToast('请输入书名');
+                return;
+            }
+            if (!authorInput.value.trim()) {
+                showToast('请输入作者');
+                return;
+            }
+            if (!categorySelect.value) {
+                showToast('请选择分类');
+                return;
+            }
+            if (!priceInput.value || parseFloat(priceInput.value) <= 0) {
+                showToast('请输入有效价格');
+                return;
+            }
+            if (!quantityInput.value || parseInt(quantityInput.value) <= 0) {
+                showToast('请输入有效数量');
+                return;
+            }
+            if (!conditionSelect.value) {
+                showToast('请选择折旧程度');
+                return;
+            }
+            if (!descriptionInput.value.trim()) {
+                showToast('请输入图书简介');
+                return;
+            }
+
+            // 构造发布数据
+            const publishData = {
+                userId: userInfo.id,
+                userName: userInfo.studentId,
+                name: bookNameInput.value.trim(),
+                author: authorInput.value.trim(),
+                category: categorySelect.value,
+                price: parseFloat(priceInput.value),
+                stock: parseInt(quantityInput.value),
+                condition: conditionSelect.value,
+                description: descriptionInput.value.trim(),
+                contact: contactInput.value.trim()
+            };
+
+            // 获取已发布的图书列表
+            let publishedBooks = JSON.parse(localStorage.getItem('published_books') || '[]');
+            publishData.id = Date.now(); // 使用时间戳作为ID
+            publishData.images = [previewImg.src];
+            publishedBooks.push(publishData);
+            localStorage.setItem('published_books', JSON.stringify(publishedBooks));
+
+            console.log('发布图书数据：', publishData);
+            showToast('发布成功！');
+            resetPublishForm();
+            
+            // 返回图书列表页
+            setTimeout(() => {
+                window.location.href = 'goods.html';
+            }, 1500);
+        });
+
+        // ========== 重置发布表单 ==========
+        function resetPublishForm() {
+            uploadedImage = null;
+            previewImgItem.style.display = 'none';
+            addImgBtn.style.display = 'flex';
+            publishFileInput.value = '';
+            
+            bookNameInput.value = '';
+            nameCount.textContent = '0/50';
+            authorInput.value = '';
+            categorySelect.value = '';
+            priceInput.value = '';
+            quantityInput.value = '1';
+            conditionSelect.value = '';
+            descriptionInput.value = '';
+            descCount.textContent = '0/500';
+            contactInput.value = '';
+        }
+
+        // ========== Tab栏跳转逻辑 ==========
+        tabItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const targetPage = item.dataset.page;
+                switch(targetPage) {
+                    case 'goods':
+                        window.location.href = 'goods.html';
+                        break;
+                    case 'publish':
+                        window.location.href = 'publish.html';
+                        break;
+                    case 'mine':
+                        window.location.href = 'mine.html';
+                        break;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

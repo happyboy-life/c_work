@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>二手图书借阅平台 - 我的</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+            font-size: 14px;
+            color: #333;
+        }
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            background-color: rgba(0,0,0,0.7);
+            color: #fff;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .mine-page {
+            background-color: #f5f5f5;
+            min-height: 100vh;
+        }
+        .mine-header {
+            padding: 15px;
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+        .mine-header-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            color: #333;
+        }
+        .mine-content {
+            padding: 15px;
+        }
+
+        /* 用户信息卡片 */
+        .mine-card {
+            background-color: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .mine-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            margin-right: 15px;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .mine-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .mine-user-info {
+            flex: 1;
+        }
+        .mine-nickname {
+            font-size: 18px;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: bold;
+        }
+        .mine-tip {
+            font-size: 12px;
+            color: #999;
+        }
+        .mine-tip.highlight {
+            color: #ff6600;
+        }
+
+        /* Tab切换栏 */
+        .tab-switch {
+            display: flex;
+            background-color: #fff;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+        .tab-switch-item {
+            flex: 1;
+            text-align: center;
+            padding: 12px 0;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .tab-switch-item.active {
+            color: #0088ff;
+            font-weight: bold;
+        }
+        .tab-switch-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 3px;
+            background-color: #0088ff;
+            border-radius: 2px;
+        }
+
+        /* 列表容器 */
+        .list-container {
+            display: none;
+        }
+        .list-container.active {
+            display: block;
+        }
+
+        /* 图书列表项 */
+        .book-list-item {
+            background-color: #fff;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 12px;
+            cursor: pointer;
+            transition: box-shadow 0.2s;
+        }
+        .book-list-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .book-list-cover {
+            width: 70px;
+            height: 95px;
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background-color: #f0f0f0;
+        }
+        .book-list-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .book-list-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .book-list-name {
+            font-size: 15px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .book-list-author {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .book-list-condition {
+            font-size: 12px;
+            color: #ff6600;
+            margin-bottom: 4px;
+        }
+        .book-list-price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 5px;
+        }
+        .book-list-price {
+            color: #ff4400;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .book-list-stock {
+            font-size: 12px;
+            color: #999;
+        }
+        .book-list-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .book-list-btn {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .btn-view {
+            background-color: #e6f7ff;
+            color: #0088ff;
+        }
+        .btn-delete {
+            background-color: #fff0f0;
+            color: #ff4444;
+        }
+
+        /* 自定义弹窗遮罩 */
+        .modal-mask {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-mask.show {
+            display: flex;
+        }
+        .modal-dialog {
+            background-color: #fff;
+            border-radius: 12px;
+            width: 300px;
+            padding: 25px 20px 20px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        .modal-title {
+            font-size: 17px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .modal-content {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.8;
+            margin-bottom: 20px;
+        }
+        .modal-content .qq-highlight {
+            color: #0088ff;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .modal-btn {
+            display: inline-block;
+            padding: 10px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 25px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        .modal-btn:active {
+            opacity: 0.8;
+        }
+
+        /* 购买列表底部按钮 */
+        .contact-seller-bar {
+            padding: 8px 0 0;
+            text-align: center;
+            border-top: 1px solid #f0f0f0;
+            margin-top: 8px;
+        }
+        .contact-seller-btn {
+            display: inline-block;
+            padding: 6px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 16px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .contact-seller-btn:active {
+            opacity: 0.8;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        .empty-icon {
+            font-size: 50px;
+            margin-bottom: 10px;
+        }
+        .empty-text {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* 未登录/未完善提示 */
+        .status-message {
+            text-align: center;
+            padding: 50px 20px;
+            background-color: #fff;
+            border-radius: 12px;
+        }
+        .status-icon {
+            font-size: 60px;
+            margin-bottom: 15px;
+        }
+        .status-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .status-desc {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        .status-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 25px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        /* 底部Tab栏 */
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            background-color: #fff;
+            border-top: 1px solid #eee;
+            padding: 5px 0;
+        }
+        .tab-bar .tab-item {
+            flex: 1;
+            text-align: center;
+            cursor: pointer;
+        }
+        .tab-bar .tab-item .icon {
+            font-size: 20px;
+            margin-bottom: 3px;
+            display: block;
+        }
+        .tab-bar .tab-item .text {
+            font-size: 12px;
+            color: #666;
+        }
+        .tab-bar .tab-item.active .text {
+            color: #0088ff;
+        }
+        .container {
+            padding-bottom: 60px;
+        }
+    </style>
+</head>
+<body class="mine-page">
+    <div class="container">
+        <div class="mine-header">
+            <div class="mine-header-title">我的</div>
+        </div>
+
+        <div class="mine-content">
+            <!-- 用户信息卡片 -->
+            <div class="mine-card" id="mineCard">
+                <div class="mine-avatar" id="userAvatar">
+                    <span id="avatarText">头</span>
+                </div>
+                <div class="mine-user-info">
+                    <div class="mine-nickname" id="userName">点击登录</div>
+                    <div class="mine-tip" id="userTip">请先登录</div>
+                </div>
+            </div>
+
+            <!-- 状态消息区域（未登录或未完善时显示） -->
+            <div id="statusMessage" style="display: none;"></div>
+
+            <!-- 正常内容区域 -->
+            <div id="normalContent" style="display: none;">
+                <!-- Tab切换栏 -->
+                <div class="tab-switch">
+                    <div class="tab-switch-item active" data-tab="collect">我的收藏</div>
+                    <div class="tab-switch-item" data-tab="published">我发布的</div>
+                    <div class="tab-switch-item" data-tab="purchased">我购买的</div>
+                </div>
+
+                <!-- 我的收藏列表 -->
+                <div class="list-container active" id="collectList"></div>
+
+                <!-- 我发布的列表 -->
+                <div class="list-container" id="publishedList"></div>
+
+                <!-- 我购买的列表 -->
+                <div class="list-container" id="purchasedList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部Tab栏 -->
+    <div class="tab-bar">
+        <div class="tab-item" data-page="goods">
+            <span class="icon">📚</span>
+            <span class="text">图书</span>
+        </div>
+        <div class="tab-item" data-page="publish">
+            <span class="icon">📤</span>
+            <span class="text">发布</span>
+        </div>
+        <div class="tab-item active" data-page="mine">
+            <span class="icon">👤</span>
+            <span class="text">我的</span>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- 卖家联系方式弹窗 -->
+    <div class="modal-mask" id="contactModal">
+        <div class="modal-dialog">
+            <div class="modal-title">📞 卖家联系方式</div>
+            <div class="modal-content" id="modalContent">
+                卖家QQ：<span class="qq-highlight" id="modalQQ">--</span>
+            </div>
+            <button class="modal-btn" id="modalCloseBtn">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        // ========== 模拟图书数据 ==========
+        const mockBooksList = [
+            { id: 1, name: '百年孤独', author: '加西亚·马尔克斯', category: '文学小说', condition: '八成新', price: 25.00, stock: 3, images: ['https://picsum.photos/200/280?random=1'] },
+            { id: 2, name: 'JavaScript高级程序设计', author: '马特·弗里斯比', category: '科学技术', condition: '九成新', price: 55.00, stock: 2, images: ['https://picsum.photos/200/280?random=2'] },
+            { id: 3, name: '人类简史', author: '尤瓦尔·赫拉利', category: '人文社科', condition: '七成新', price: 30.00, stock: 1, images: ['https://picsum.photos/200/280?random=3'] },
+            { id: 4, name: '经济学原理', author: '曼昆', category: '经济管理', condition: '八五成新', price: 45.00, stock: 5, images: ['https://picsum.photos/200/280?random=4'] },
+            { id: 5, name: '高等数学', author: '同济大学数学系', category: '教育考试', condition: '六成新', price: 15.00, stock: 2, images: ['https://picsum.photos/200/280?random=5'] },
+            { id: 6, name: '活着', author: '余华', category: '文学小说', condition: '九成新', price: 18.00, stock: 4, images: ['https://picsum.photos/200/280?random=6'] }
+        ];
+
+        // ========== DOM元素 ==========
+        const toast = document.getElementById('toast');
+        const mineCard = document.getElementById('mineCard');
+        const userName = document.getElementById('userName');
+        const userAvatar = document.getElementById('userAvatar');
+        const avatarText = document.getElementById('avatarText');
+        const userTip = document.getElementById('userTip');
+        const statusMessage = document.getElementById('statusMessage');
+        const normalContent = document.getElementById('normalContent');
+        const tabSwitchItems = document.querySelectorAll('.tab-switch-item');
+        const collectList = document.getElementById('collectList');
+        const publishedList = document.getElementById('publishedList');
+        const purchasedList = document.getElementById('purchasedList');
+        const tabItems = document.querySelectorAll('.tab-bar .tab-item');
+
+        // ========== 工具函数 ==========
+        function showToast(message, duration = 2000) {
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, duration);
+        }
+
+        // ========== 获取当前用户 ==========
+        function getCurrentUser() {
+            const currentUserId = localStorage.getItem('currentUserId');
+            if (!currentUserId) return null;
+            
+            const users = JSON.parse(localStorage.getItem('users') || '{}');
+            return users[currentUserId] ? { id: currentUserId, ...users[currentUserId] } : null;
+        }
+
+        // ========== 获取用户资料 ==========
+        function getUserProfile() {
+            const user = getCurrentUser();
+            if (!user) return null;
+            
+            const profiles = JSON.parse(localStorage.getItem('profiles') || '{}');
+            return profiles[user.id] || null;
+        }
+
+        // ========== 检查登录状态 ==========
+        function checkLoginStatus() {
+            return getCurrentUser() !== null;
+        }
+
+        // ========== 检查资料是否完善 ==========
+        function isProfileComplete() {
+            const user = getCurrentUser();
+            if (!user) return false;
+            return user.isProfileComplete === true;
+        }
+
+        // ========== 渲染用户卡片 ==========
+        function renderUserCard() {
+            const user = getCurrentUser();
+            const profile = getUserProfile();
+
+            if (!user) {
+                // 未登录
+                userName.textContent = '点击登录';
+                avatarText.textContent = '登';
+                userAvatar.innerHTML = '<span id="avatarText">登</span>';
+                userTip.textContent = '请先登录';
+                userTip.className = 'mine-tip highlight';
+            } else if (!user.isProfileComplete) {
+                // 已登录但未完善资料
+                userName.textContent = profile?.name || '用户';
+                if (profile?.avatar) {
+                    userAvatar.innerHTML = `<img src="${profile.avatar}" alt="头像">`;
+                } else {
+                    userAvatar.innerHTML = `<span>${(profile?.name || '用').charAt(0)}</span>`;
+                }
+                userTip.textContent = '点击完善信息';
+                userTip.className = 'mine-tip highlight';
+            } else {
+                // 已登录且资料完善
+                userName.textContent = profile?.name || '用户';
+                if (profile?.avatar) {
+                    userAvatar.innerHTML = `<img src="${profile.avatar}" alt="头像">`;
+                } else {
+                    userAvatar.innerHTML = `<span>${(profile?.name || '用').charAt(0)}</span>`;
+                }
+                userTip.textContent = '点击更改信息';
+                userTip.className = 'mine-tip';
+            }
+        }
+
+        // ========== 渲染状态消息 ==========
+        function renderStatusMessage() {
+            const user = getCurrentUser();
+
+            if (!user) {
+                // 未登录
+                statusMessage.innerHTML = `
+                    <div class="status-message">
+                        <div class="status-icon">🔐</div>
+                        <div class="status-title">请先登录</div>
+                        <div class="status-desc">登录后即可查看收藏、发布和购买的图书</div>
+                        <button class="status-btn" onclick="goToLogin()">去登录</button>
+                    </div>
+                `;
+                statusMessage.style.display = 'block';
+                normalContent.style.display = 'none';
+            } else if (!user.isProfileComplete) {
+                // 已登录但未完善资料
+                statusMessage.innerHTML = `
+                    <div class="status-message">
+                        <div class="status-icon">📝</div>
+                        <div class="status-title">请先完善信息</div>
+                        <div class="status-desc">完善个人资料后才能使用发布和购买功能<br>包括姓名、班级、学号、宿舍地址</div>
+                        <button class="status-btn" onclick="goToProfile()">去完善</button>
+                    </div>
+                `;
+                statusMessage.style.display = 'block';
+                normalContent.style.display = 'none';
+            } else {
+                // 已登录且资料完善
+                statusMessage.style.display = 'none';
+                normalContent.style.display = 'block';
+            }
+        }
+
+        // ========== 跳转函数 ==========
+        window.goToLogin = function() {
+            window.location.href = 'login.html';
+        };
+
+        window.goToProfile = function() {
+            window.location.href = 'mydata.html';
+        };
+
+        // ========== 渲染图书卡片 ==========
+        function renderBookCard(book, showActions = false, showContact = false) {
+            return `
+                <div class="book-list-item" data-id="${book.id}">
+                    <div class="book-list-cover">
+                        <img src="${book.images ? book.images[0] : 'https://picsum.photos/200/280?random=' + book.id}" alt="${book.name}">
+                    </div>
+                    <div class="book-list-info">
+                        <div class="book-list-name">${book.name}</div>
+                        <div class="book-list-author">作者：${book.author}</div>
+                        <div class="book-list-condition">折旧程度：${book.condition}</div>
+                        <div class="book-list-price-row">
+                            <span class="book-list-price">¥${book.price.toFixed(2)}</span>
+                            <span class="book-list-stock">剩余 ${book.stock} 本</span>
+                        </div>
+                        ${showActions ? `
+                        <div class="book-list-actions">
+                            <button class="book-list-btn btn-view" onclick="event.stopPropagation(); viewBook(${book.id})">查看详情</button>
+                            <button class="book-list-btn btn-delete" onclick="event.stopPropagation(); deleteBook(${book.id})">删除</button>
+                        </div>
+                        ` : ''}
+                        ${showContact ? `
+                        <div class="contact-seller-bar">
+                            <button class="contact-seller-btn" onclick="event.stopPropagation();">请联系卖家</button>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderEmptyState(icon, text) {
+            return `<div class="empty-state"><div class="empty-icon">${icon}</div><div class="empty-text">${text}</div></div>`;
+        }
+
+        // ========== 渲染列表 ==========
+        function renderCollectList() {
+            const user = getCurrentUser();
+            if (!user || !user.isProfileComplete) return;
+
+            const collectIds = JSON.parse(localStorage.getItem('collect_list') || '[]');
+            if (collectIds.length === 0) {
+                collectList.innerHTML = renderEmptyState('⭐', '暂无收藏的图书\n去首页逛逛吧~');
+                return;
+            }
+
+            let html = '';
+            collectIds.forEach(id => {
+                const book = mockBooksList.find(b => b.id === id);
+                if (book) html += renderBookCard(book);
+            });
+            collectList.innerHTML = html;
+
+            collectList.querySelectorAll('.book-list-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    window.location.href = `detail.html?id=${item.dataset.id}`;
+                });
+            });
+        }
+
+        function renderPublishedList() {
+            const user = getCurrentUser();
+            if (!user || !user.isProfileComplete) return;
+
+            const publishedBooks = JSON.parse(localStorage.getItem('published_books') || '[]');
+            if (publishedBooks.length === 0) {
+                publishedList.innerHTML = renderEmptyState('📤', '暂无发布的图书\n快去发布一本吧~');
+                return;
+            }
+
+            let html = '';
+            publishedBooks.forEach(book => {
+                html += renderBookCard(book, true);
+            });
+            publishedList.innerHTML = html;
+
+            publishedList.querySelectorAll('.book-list-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    window.location.href = `detail.html?id=${item.dataset.id}`;
+                });
+            });
+        }
+
+        function renderPurchasedList() {
+            const user = getCurrentUser();
+            if (!user || !user.isProfileComplete) return;
+
+            const purchasedBooks = JSON.parse(localStorage.getItem('purchased_books') || '[]');
+            if (purchasedBooks.length === 0) {
+                purchasedList.innerHTML = renderEmptyState('🛒', '暂无购买的图书\n去首页选购吧~');
+                return;
+            }
+
+            let html = '';
+            purchasedBooks.forEach((book, index) => {
+                html += renderBookCard(book, false, true);
+            });
+            purchasedList.innerHTML = html;
+
+            // 绑定"请联系卖家"按钮事件
+            purchasedList.querySelectorAll('.contact-seller-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const bookCard = btn.closest('.book-list-item');
+                    const bookId = parseInt(bookCard.dataset.id);
+                    const purchasedBooks = JSON.parse(localStorage.getItem('purchased_books') || '[]');
+                    const book = purchasedBooks.find(b => b.id === bookId);
+                    if (book) {
+                        const sellerQQ = getSellerQQForBook(book);
+                        document.getElementById('modalQQ').textContent = sellerQQ;
+                        document.getElementById('contactModal').classList.add('show');
+                    }
+                });
+            });
+
+            // 绑定点击跳转详情
+            purchasedList.querySelectorAll('.book-list-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    window.location.href = `detail.html?id=${item.dataset.id}`;
+                });
+            });
+        }
+
+        // ========== 全局函数 ==========
+        window.viewBook = function(bookId) {
+            window.location.href = `detail.html?id=${bookId}`;
+        };
+
+        window.deleteBook = function(bookId) {
+            if (!confirm('确定要删除这本图书吗？')) return;
+            let publishedBooks = JSON.parse(localStorage.getItem('published_books') || '[]');
+            publishedBooks = publishedBooks.filter(book => book.id !== bookId);
+            localStorage.setItem('published_books', JSON.stringify(publishedBooks));
+            showToast('已删除');
+            renderPublishedList();
+        };
+
+        // ========== Tab切换 ==========
+        tabSwitchItems.forEach(item => {
+            item.addEventListener('click', () => {
+                tabSwitchItems.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+
+                const tab = item.dataset.tab;
+                collectList.classList.remove('active');
+                publishedList.classList.remove('active');
+                purchasedList.classList.remove('active');
+
+                if (tab === 'collect') {
+                    collectList.classList.add('active');
+                    renderCollectList();
+                } else if (tab === 'published') {
+                    publishedList.classList.add('active');
+                    renderPublishedList();
+                } else if (tab === 'purchased') {
+                    purchasedList.classList.add('active');
+                    renderPurchasedList();
+                }
+            });
+        });
+
+        // ========== 用户卡片点击 ==========
+        mineCard.addEventListener('click', () => {
+            const user = getCurrentUser();
+            if (!user) {
+                // 未登录，跳转登录页
+                window.location.href = 'login.html';
+            } else {
+                // 已登录，跳转个人资料页
+                window.location.href = 'mydata.html';
+            }
+        });
+
+        // ========== 获取卖家QQ ==========
+        function getSellerQQForBook(book) {
+            // 从users中按seller_name匹配获取QQ
+            const users = JSON.parse(localStorage.getItem('users') || '{}');
+            const profiles = JSON.parse(localStorage.getItem('profiles') || '{}');
+            for (const uid in users) {
+                const profile = profiles[uid];
+                if (profile && profile.name === book.seller_name && profile.qq) {
+                    return profile.qq;
+                }
+            }
+            return '暂未填写';
+        }
+
+        // ========== 弹窗关闭 ==========
+        document.getElementById('modalCloseBtn').addEventListener('click', () => {
+            document.getElementById('contactModal').classList.remove('show');
+        });
+
+        document.getElementById('contactModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('contactModal')) {
+                document.getElementById('contactModal').classList.remove('show');
+            }
+        });
+
+        // ========== Tab栏跳转 ==========
+        tabItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const targetPage = item.dataset.page;
+                if (targetPage) {
+                    window.location.href = `${targetPage}.html`;
+                }
+            });
+        });
+
+        // ========== 页面初始化 ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            renderUserCard();
+            renderStatusMessage();
+            
+            // 如果资料完善，渲染列表
+            if (checkLoginStatus() && isProfileComplete()) {
+                renderCollectList();
+            }
+        });
+    </script>
+</body>
+</html>
