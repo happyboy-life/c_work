@@ -78,10 +78,7 @@ static void print_info(void) {
     set_color(10);
     printf("  ║  【开发者信息】                                          ║\n");
     reset_color();
-    printf("  ║    开发者: [请在此填写您的姓名]                           ║\n");
-    printf("  ║    学  号: [请在此填写您的学号]                           ║\n");
-    printf("  ║    班  级: [请在此填写您的班级]                           ║\n");
-    printf("  ║    指导老师: [请在此填写指导老师]                         ║\n");
+    printf("  ║    开发者: 欧阳周翔                                       ║\n");
     printf("  ║    开发日期: 2026年5月                                   ║\n");
     printf("  ║                                                          ║\n");
 
@@ -96,10 +93,8 @@ static void print_menu(void) {
     printf("  ┌──────────────── 主 菜 单 ────────────────┐\n");
     printf("  │                                            │\n");
     reset_color();
-    printf("  │    [1]  启动 HTTP 服务器 (端口 8080)        │\n");
-    printf("  │    [2]  在浏览器中打开系统                   │\n");
-    printf("  │    [3]  查看数据库统计信息                   │\n");
-    printf("  │    [4]  查看帮助文档                         │\n");
+    printf("  │    [1]  一键启动（启动服务器并打开浏览器）   │\n");
+    printf("  │    [2]  打印本学期交易情况统计报表           │\n");
     printf("  │    [0]  退出系统                             │\n");
     set_color(14);
     printf("  │                                            │\n");
@@ -107,7 +102,7 @@ static void print_menu(void) {
     reset_color();
     printf("\n");
     set_color(15);
-    printf("  请选择操作 [0-4]: ");
+    printf("  请选择操作 [0-2]: ");
     reset_color();
 }
 
@@ -122,8 +117,8 @@ static void do_start_server(void) {
     printf("  ────────────────────────────────────────────────\n\n");
     reset_color();
 
-    /* 调用 server.exe */
-    system("server.exe");
+    /* 异步启动 server.exe（非阻塞，后台运行） */
+    ShellExecute(NULL, "open", "server.exe", NULL, NULL, SW_HIDE);
 }
 
 static void do_open_browser(void) {
@@ -133,6 +128,17 @@ static void do_open_browser(void) {
     reset_color();
     ShellExecute(NULL, "open", "http://localhost:8080", NULL, NULL, SW_SHOW);
     printf("  如果浏览器未自动打开，请手动访问: http://localhost:8080\n");
+}
+
+static void do_print_stats_report(void) {
+    printf("\n");
+    set_color(11);
+    printf("  ⚡ 正在生成统计报表...\n");
+    printf("  ────────────────────────────────────────────────\n\n");
+    reset_color();
+
+    /* 调用 stats_report.exe 显示统计报表 */
+    system("stats_report.exe");
 }
 
 static void do_show_stats(void) {
@@ -207,22 +213,14 @@ int main(void) {
         switch (choice) {
             case 1:
                 do_start_server();
-                break;
-            case 2:
+                printf("\n  服务器启动完成！正在打开浏览器...\n");
+                Sleep(500);
                 do_open_browser();
                 printf("\n  按回车键返回主菜单...");
                 getchar();
                 break;
-            case 3:
-                do_show_stats();
-                printf("\n  按回车键返回主菜单...");
-                getchar();
-                break;
-            case 4:
-                system("cls");
-                do_show_help();
-                printf("\n  按回车键返回主菜单...");
-                getchar();
+            case 2:
+                do_print_stats_report();
                 break;
             case 0:
                 set_color(10);

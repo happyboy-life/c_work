@@ -1,9 +1,10 @@
 @echo off
 chcp 65001 >nul 2>nul
-title Campus Bookstore Management System
+title 校园二手书交易管理系统
 
 :: ============================================================
-:: Campus Second-hand Book Trading Management System - Start Script
+:: 校园二手书交易管理系统 - 一键启动脚本
+:: 流程：编译 server.exe → stats_report.exe → welcome.exe → 启动 welcome.exe
 :: ============================================================
 
 set PROJECT_DIR=%~dp0
@@ -33,28 +34,44 @@ echo.
 taskkill /f /im server.exe >nul 2>nul
 
 :: —— Compile Server ——
-echo --- Compiling server.exe ...
-%GCC% server.c simple_database.c -o server.exe -lsqlite3 -lws2_32 -O2 -Wall
+echo [1/3] Compiling server.exe ...
+%GCC% server.c simple_database.c data_persistence.c -o server.exe -lsqlite3 -lws2_32 -O2 -Wall
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Compilation failed! Please check the error messages.
+    echo [ERROR] server.exe compilation failed! Please check the error messages.
     pause
     exit /b 1
 )
-echo Compilation successful!
+echo server.exe compiled successfully!
 echo.
 
-:: —— Start Server ——
-echo ============================================================
-echo  Campus Second-hand Book Trading Management System
-echo ============================================================
-echo  Server starting on port: 8080
-echo  Open browser: http://localhost:8080
-echo ============================================================
-echo.
-echo  Press Ctrl+C to stop the server.
+:: —— Compile Stats Report ——
+echo [2/3] Compiling stats_report.exe ...
+%GCC% stats_report.c -o stats_report.exe -lsqlite3 -O2 -Wall
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] stats_report.exe compilation failed! Please check the error messages.
+    pause
+    exit /b 1
+)
+echo stats_report.exe compiled successfully!
 echo.
 
-start http://localhost:8080
-server.exe
+:: —— Compile Welcome ——
+echo [3/3] Compiling welcome.exe ...
+%GCC% welcome.c -o welcome.exe -O2 -Wall
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] welcome.exe compilation failed! Please check the error messages.
+    pause
+    exit /b 1
+)
+echo welcome.exe compiled successfully!
+echo.
+
+:: —— Start Welcome (Launcher) ——
+echo ============================================================
+echo  Starting System Launcher...
+echo ============================================================
+echo.
+
+welcome.exe
 
 pause

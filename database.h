@@ -9,7 +9,8 @@
 typedef enum {
     STATUS_OK              =  0,  // 操作成功
     STATUS_EXISTS          =  1,  // 资源已存在（用户名/收藏重复）
-    STATUS_OUT_OF_STOCK    =  2,  // 库存不足
+    STATUS_CREATED         =  2,  // 登录时自动创建了新账号
+    STATUS_OUT_OF_STOCK    =  3,  // 库存不足
     STATUS_NOT_FOUND       = -1,  // 资源未找到
     STATUS_DB_ERROR        = -2,  // 数据库操作失败
     STATUS_INVALID_PARAM   = -3   // 参数不完整/非法
@@ -139,7 +140,8 @@ int  get_book_by_id(int book_id, Book **out_book);
 // 图书搜索（多条件查询）
 int  search_books(const char *keyword, const char *author,
                   const char *isbn, float min_price, float max_price,
-                  int seller_id, int status, const char *category,
+                  int seller_id, const char *seller_student_id,
+                  int status, const char *category,
                   Book **out_books, int *out_count);
 
 // 收藏操作
@@ -151,10 +153,14 @@ int  get_published_books(int user_id, Book **out_books, int *out_count);
 int  get_purchased_books(int user_id, Book **out_books, int *out_count);
 int  purchase_book(const char *json_data);
 
-// 下架图书
-int  delist_book(int book_id, int user_id);
+// 下架图书（需核对发布者学号）
+int  delist_book(int book_id, int user_id, const char *student_id);
 
 // 统计报表
 int  get_stats(Stats **out_stats);
+
+// 数据文件持久化 —— 将链表缓存保存到 books.dat / users.dat
+int  sync_book_cache_to_file(void);
+int  sync_user_cache_to_file(void);
 
 #endif /* DATABASE_H */

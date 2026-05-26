@@ -4,12 +4,17 @@
 #include <time.h>
 #include <sqlite3.h>
 #include "database.h"
+#include "data_persistence.h"
 
 /*==========================================================================
  * 全局变量 —— 数据库句柄与动态链表缓存
  *==========================================================================*/
+#define DATA_FILE      "books.dat"
+#define USER_DATA_FILE "users.dat"
+
 static sqlite3 *g_db = NULL;        /* 全局数据库句柄 */
 static Book   *g_book_cache = NULL; /* 在售+历史图书全量链表缓存 */
+static User   *g_user_cache = NULL; /* 用户全量链表缓存 */
 
 // 安全释放 SQLite 错误信息
 #define SAFE_FREE_ERR(e)  do { if (e) { sqlite3_free(e); (e) = NULL; } } while(0)
@@ -169,18 +174,65 @@ static void rebuild_book_cache(void) {
  * 数据库生命周期
  *==========================================================================*/
 
-int init_database(void) {
-    int rc = sqlite3_open("bookstore.db", &g_db);
-    if (rc) {
-        fprintf(stderr, "[DB] 无法打开数据库: %s\n", sqlite3_errmsg(g_db));
-        return STATUS_DB_ERROR;
+/*
+ * 修复 WAL 残留 —— 如果上次异常退出，WAL 文件可能导致数据库打开失败
+ * 通过清理 -wal 和 -shm 文件来恢复数据库到一致状态
+ */
+static void wal_recovery(const char *db_path) {
+    /* 先尝试通过 WAL checkpoint 恢复 */
+    sqlite3 *db_test = NULL;
+    int rc = sqlite3_open_v2(db_path, &db_test,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL);
+    if (rc == SQLITE_OK && db_test) {
+        /* 强制 WAL checkpoint 将所有日志写入主文件 */
+        sqlite3_exec(db_test, "PRAGMA wal_checkpoint(TRUNCATE);", NULL, NULL, NULL);
+        sqlite3_close(db_test);
+        printf("[DB] WAL 恢复完成 (checkpoint)\n");
     }
 
-    /* 启用外键与WAL模式提升并发性能 */
+    /* 删除残留的 WAL/SHM 文件（如果 checkpoint 后仍然存在） */
+    remove("bookstore.db-wal");
+    remove("bookstore.db-shm");
+    printf("[DB] WAL 残留文件已清理\n");
+}
+
+int init_database(void) {
+    /* Step 1: 在打开数据库之前先清理 WAL 残留 */
+    wal_recovery("bookstore.db");
+
+    /* Step 2: 打开数据库（多次重试） */
+    int retry = 0;
+    int rc;
+    while (retry < 3) {
+        rc = sqlite3_open("bookstore.db", &g_db);
+        if (rc == SQLITE_OK) break;
+        fprintf(stderr, "[DB] 第 %d 次打开失败 (rc=%d): %s\n",
+                retry + 1, rc, g_db ? sqlite3_errmsg(g_db) : "N/A");
+        if (g_db) { sqlite3_close(g_db); g_db = NULL; }
+        /* 再次清理残留并重试 */
+        wal_recovery("bookstore.db");
+        retry++;
+    }
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[DB] 3次重试均失败，将依赖 books.dat 文件运行\n");
+        /* 数据库完全不可用，尝试从数据文件加载 */
+        int fcount = 0;
+        int fret = load_books_from_file(&g_book_cache, &fcount, DATA_FILE);
+        if (fret == STATUS_OK) {
+            printf("[DB] 已从 %s 恢复 %d 条记录到链表缓存 (SQLite不可用)\n",
+                   DATA_FILE, fcount);
+            return STATUS_OK;
+        }
+        fprintf(stderr, "[DB] 数据文件也无法加载，以空缓存启动\n");
+        return STATUS_OK;  /* 以空缓存运行，不阻断服务器启动 */
+    }
+
+    /* Step 3: 启用 WAL 模式与外键 */
     sqlite3_exec(g_db, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL);
     sqlite3_exec(g_db, "PRAGMA foreign_keys=ON;", NULL, NULL, NULL);
 
-    /* 使用数组驱动方式创建表 */
+    /* Step 4: 创建表结构 */
     const char *schemas[] = {
         "CREATE TABLE IF NOT EXISTS users ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -226,18 +278,111 @@ int init_database(void) {
 
     size_t n = sizeof(schemas) / sizeof(schemas[0]);
     for (size_t i = 0; i < n; i++) {
-        if (db_exec_simple(schemas[i]) != STATUS_OK) return STATUS_DB_ERROR;
+        if (db_exec_simple(schemas[i]) != STATUS_OK) {
+            fprintf(stderr, "[DB] 建表失败，尝试从数据文件恢复\n");
+            /* 建表失败但数据库可能部分可用，尝试加载数据文件 */
+            int fcount = 0;
+            load_books_from_file(&g_book_cache, &fcount, DATA_FILE);
+            printf("[DB] 以降级模式启动 (缓存=%d条)\n", fcount);
+            return STATUS_OK;
+        }
     }
 
-    /* 初始化链表缓存 */
+    /* Step 5: 初始化图书链表缓存 —— 优先从 SQLite，失败则回退到 books.dat */
     rebuild_book_cache();
 
-    puts("[DB] 数据库初始化完成，链表缓存就绪");
+    /* 如果数据库为空但 books.dat 有数据，同步恢复 */
+    if (!g_book_cache) {
+        int fcount = 0;
+        int fret = load_books_from_file(&g_book_cache, &fcount, DATA_FILE);
+        if (fret == STATUS_OK) {
+            printf("[DB] 数据库为空，已从 %s 恢复 %d 条记录\n",
+                   DATA_FILE, fcount);
+            /* 将数据文件中的记录写回 SQLite */
+            Book *p = g_book_cache;
+            while (p) {
+                char sql[1536];
+                snprintf(sql, sizeof(sql),
+                    "INSERT INTO books (id, name, author, isbn, publisher, "
+                    "category, condition, price, stock, status, user_id, "
+                    "seller_name, image_url, create_time) "
+                    "VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', "
+                    "%.2f, %d, %d, %d, '%s', '%s', '%s');",
+                    p->id, p->name, p->author, p->isbn, p->publisher,
+                    p->category, p->condition, p->price, p->stock,
+                    p->status, p->user_id, p->seller_name,
+                    p->image_url, p->create_time);
+                db_exec_simple(sql);
+                p = p->next;
+            }
+            printf("[DB] 数据文件记录已同步回 SQLite\n");
+        }
+    } else {
+        /* SQLite 有数据，立即同步到数据文件 */
+        save_books_to_file(g_book_cache, DATA_FILE);
+    }
+
+    /* Step 6: 初始化用户链表缓存 */
+    {
+        /* 尝试从 users.dat 加载 */
+        int ucount = 0;
+        int uret = load_users_from_file(&g_user_cache, &ucount, USER_DATA_FILE);
+        if (uret == STATUS_OK) {
+            printf("[DB] 已从 %s 加载 %d 条用户记录\n", USER_DATA_FILE, ucount);
+        } else if (uret == STATUS_NOT_FOUND) {
+            printf("[DB] %s 不存在，从 SQLite 重建\n", USER_DATA_FILE);
+            /* 从 SQLite 加载所有用户 */
+            sqlite3_stmt *ustmt = NULL;
+            if (sqlite3_prepare_v2(g_db,
+                    "SELECT id, username, password, is_profile_complete "
+                    "FROM users ORDER BY id;",
+                    -1, &ustmt, NULL) == SQLITE_OK) {
+                User *utail = NULL;
+                int loaded = 0;
+                while (sqlite3_step(ustmt) == SQLITE_ROW) {
+                    User *u = (User*)calloc(1, sizeof(User));
+                    if (!u) break;
+                    u->id = sqlite3_column_int(ustmt, 0);
+                    strcpy(u->username, (const char*)sqlite3_column_text(ustmt, 1));
+                    strcpy(u->password, (const char*)sqlite3_column_text(ustmt, 2));
+                    u->is_profile_complete = sqlite3_column_int(ustmt, 3);
+                    u->next = NULL;
+                    if (!g_user_cache) g_user_cache = utail = u;
+                    else { utail->next = u; utail = u; }
+                    loaded++;
+                }
+                sqlite3_finalize(ustmt);
+                if (loaded > 0) {
+                    save_users_to_file(g_user_cache, USER_DATA_FILE);
+                    printf("[DB] 从 SQLite 加载了 %d 条用户并保存到 %s\n",
+                           loaded, USER_DATA_FILE);
+                }
+            }
+        }
+    }
+
+    puts("[DB] 数据库初始化完成，链表缓存与数据文件已同步");
     return STATUS_OK;
 }
 
+/* 将链表缓存同步到数据文件（供外部调用） */
+int sync_book_cache_to_file(void) {
+    return save_books_to_file(g_book_cache, DATA_FILE);
+}
+
+/* 将用户缓存同步到数据文件（供外部调用） */
+int sync_user_cache_to_file(void) {
+    return save_users_to_file(g_user_cache, USER_DATA_FILE);
+}
+
 void close_database(void) {
-    FREE_LIST(g_book_cache, Book);  /* 释放链表缓存 */
+    /* 退出前保存数据到文件 */
+    save_books_to_file(g_book_cache, DATA_FILE);
+    save_users_to_file(g_user_cache, USER_DATA_FILE);
+    /* 强制 WAL checkpoint 确保数据写入主文件 */
+    if (g_db) sqlite3_exec(g_db, "PRAGMA wal_checkpoint(TRUNCATE);", NULL, NULL, NULL);
+    FREE_LIST(g_book_cache, Book);  /* 释放图书链表缓存 */
+    FREE_LIST(g_user_cache, User);  /* 释放用户链表缓存 */
     if (g_db) { sqlite3_close(g_db); g_db = NULL; }
 }
 
@@ -278,6 +423,7 @@ int login_user(const char *json_data, User **out_user) {
 
     if (!username[0] || !password[0]) return STATUS_INVALID_PARAM;
 
+    /* Step 1: 尝试查找已有用户 */
     char sql[256];
     sqlite3_stmt *stmt = NULL;
     snprintf(sql, sizeof(sql),
@@ -285,22 +431,64 @@ int login_user(const char *json_data, User **out_user) {
              "FROM users WHERE username='%s' AND password='%s';",
              username, password);
 
-    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK)
-        return STATUS_DB_ERROR;
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        User *u = (User*)calloc(1, sizeof(User));
-        if (!u) { sqlite3_finalize(stmt); return STATUS_DB_ERROR; }
-        u->id                  = sqlite3_column_int(stmt, 0);
-        strcpy(u->username,    (const char*)sqlite3_column_text(stmt, 1));
-        u->is_profile_complete = sqlite3_column_int(stmt, 2);
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            User *u = (User*)calloc(1, sizeof(User));
+            if (!u) { sqlite3_finalize(stmt); return STATUS_DB_ERROR; }
+            u->id                  = sqlite3_column_int(stmt, 0);
+            strcpy(u->username,    (const char*)sqlite3_column_text(stmt, 1));
+            u->is_profile_complete = sqlite3_column_int(stmt, 2);
+            sqlite3_finalize(stmt);
+            *out_user = u;
+            return STATUS_OK;  /* 已有用户，验证密码通过 */
+        }
         sqlite3_finalize(stmt);
-        *out_user = u;
-        return STATUS_OK;
     }
 
-    sqlite3_finalize(stmt);
-    return STATUS_NOT_FOUND;
+    /* Step 2: 检查用户名是否被占用（密码不匹配的情况） */
+    snprintf(sql, sizeof(sql),
+             "SELECT id FROM users WHERE username='%s';", username);
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            sqlite3_finalize(stmt);
+            return STATUS_NOT_FOUND;  /* 用户名存在但密码错误 → 返回登录失败 */
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    /* Step 3: 用户名不存在 → 自动创建新账号（登录即注册） */
+    snprintf(sql, sizeof(sql),
+             "INSERT INTO users (username, password) VALUES ('%s', '%s');",
+             username, password);
+    if (db_exec_simple(sql) != STATUS_OK) return STATUS_DB_ERROR;
+
+    int new_id = (int)sqlite3_last_insert_rowid(g_db);
+
+    /* 将新用户插入链表缓存 */
+    {
+        User *u = (User*)calloc(1, sizeof(User));
+        if (!u) return STATUS_DB_ERROR;
+        u->id = new_id;
+        strcpy(u->username, username);
+        strcpy(u->password, password);
+        u->is_profile_complete = 0;
+        u->next = g_user_cache;
+        g_user_cache = u;
+    }
+
+    /* 自动同步用户数据文件 */
+    save_users_to_file(g_user_cache, USER_DATA_FILE);
+    printf("[User] 新用户自动注册: id=%d, username=%s\n", new_id, username);
+
+    /* 返回新创建的用户信息 */
+    User *new_user = (User*)calloc(1, sizeof(User));
+    if (!new_user) return STATUS_DB_ERROR;
+    new_user->id = new_id;
+    strcpy(new_user->username, username);
+    new_user->is_profile_complete = 0;
+    *out_user = new_user;
+
+    return STATUS_CREATED;  /* 表示是新创建的账号 */
 }
 
 int get_user_profile(int user_id, UserProfile **out_profile) {
@@ -453,6 +641,8 @@ int add_book(const char *json_data) {
         }
     }
 
+    /* 自动同步数据文件 */
+    save_books_to_file(g_book_cache, DATA_FILE);
     return new_id;  /* 成功时返回新书 ID */
 }
 
@@ -521,7 +711,8 @@ int get_book_by_id(int book_id, Book **out_book) {
 
 int search_books(const char *keyword, const char *author,
                  const char *isbn, float min_price, float max_price,
-                 int seller_id, int status, const char *category,
+                 int seller_id, const char *seller_student_id,
+                 int status, const char *category,
                  Book **out_books, int *out_count) {
     /* 
      * 从链表缓存中按条件过滤
@@ -533,8 +724,25 @@ int search_books(const char *keyword, const char *author,
                      || (min_price > 0)
                      || (max_price > 0)
                      || (seller_id > 0)
+                     || (seller_student_id && seller_student_id[0])
                      || (status >= 0)
                      || (category && category[0]);
+
+    /* 如果按学号搜索，先查询学号对应的 user_id 集合 */
+    int seller_user_id_from_student = 0;
+    if (seller_student_id && seller_student_id[0]) {
+        char sql[256];
+        sqlite3_stmt *stmt = NULL;
+        snprintf(sql, sizeof(sql),
+                 "SELECT user_id FROM user_profiles WHERE student_id='%s';",
+                 seller_student_id);
+        if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                seller_user_id_from_student = sqlite3_column_int(stmt, 0);
+            }
+            sqlite3_finalize(stmt);
+        }
+    }
 
     Book *result_head = NULL, *result_tail = NULL;
     int count = 0;
@@ -546,7 +754,9 @@ int search_books(const char *keyword, const char *author,
         /* 默认无筛选时返回所有 */
         if (has_condition) {
             if (keyword && keyword[0]) {
-                if (!strstr(p->name, keyword) && !strstr(p->author, keyword))
+                if (!strstr(p->name, keyword)
+                    && !strstr(p->author, keyword)
+                    && !strstr(p->isbn, keyword))
                     match = 0;
             }
             if (author && author[0] && !strstr(p->author, author)) match = 0;
@@ -554,6 +764,8 @@ int search_books(const char *keyword, const char *author,
             if (min_price > 0 && p->price < min_price) match = 0;
             if (max_price > 0 && p->price > max_price) match = 0;
             if (seller_id > 0 && p->user_id != seller_id) match = 0;
+            if (seller_student_id && seller_student_id[0]
+                && p->user_id != seller_user_id_from_student) match = 0;
             if (status >= 0 && p->status != status) match = 0;
             if (category && category[0] && strcmp(p->category, category) != 0)
                 match = 0;
@@ -722,6 +934,8 @@ int purchase_book(const char *json_data) {
         cached->status = new_stock <= 0 ? BOOK_STATUS_SOLD : BOOK_STATUS_ON_SALE;
     }
 
+    /* 自动同步数据文件 */
+    if (ret == STATUS_OK) save_books_to_file(g_book_cache, DATA_FILE);
     return ret;
 }
 
@@ -729,9 +943,12 @@ int purchase_book(const char *json_data) {
  * 下架图书 —— 同步更新链表缓存
  *==========================================================================*/
 
-int delist_book(int book_id, int user_id) {
+int delist_book(int book_id, int user_id, const char *student_id) {
     /* 先从缓存验证 */
     Book *cached = find_book_in_cache(book_id);
+    int book_owner_id = 0;
+    int status = -1;
+
     if (!cached) {
         /* 缓存未找到，从数据库查询 */
         char sql[256];
@@ -744,29 +961,67 @@ int delist_book(int book_id, int user_id) {
             sqlite3_finalize(stmt);
             return STATUS_NOT_FOUND;
         }
-        int status    = sqlite3_column_int(stmt, 0);
-        int book_owner = sqlite3_column_int(stmt, 1);
+        status       = sqlite3_column_int(stmt, 0);
+        book_owner_id = sqlite3_column_int(stmt, 1);
         sqlite3_finalize(stmt);
 
-        if (book_owner != user_id) return STATUS_INVALID_PARAM;
+        if (book_owner_id != user_id) return STATUS_INVALID_PARAM;
         if (status != BOOK_STATUS_ON_SALE) return STATUS_NOT_FOUND;
     } else {
+        book_owner_id = cached->user_id;
         /* 验证卖家身份 */
-        if (cached->user_id != user_id) return STATUS_INVALID_PARAM;
+        if (book_owner_id != user_id) return STATUS_INVALID_PARAM;
         /* 只能下架"在售"状态的图书 */
         if (cached->status != BOOK_STATUS_ON_SALE) return STATUS_NOT_FOUND;
     }
 
-    char sql[256];
-    snprintf(sql, sizeof(sql),
+    /* ===========================================================
+     * 核对发布者学号
+     * 从 user_profiles 中查询发布者的 student_id 进行比对
+     * ===========================================================*/
+    if (student_id && student_id[0]) {
+        char sql[256];
+        sqlite3_stmt *stmt = NULL;
+        snprintf(sql, sizeof(sql),
+                 "SELECT student_id FROM user_profiles WHERE user_id=%d;",
+                 book_owner_id);
+        if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                const char *db_student_id =
+                    (const char*)sqlite3_column_text(stmt, 0);
+                if (!db_student_id || strcmp(db_student_id, student_id) != 0) {
+                    sqlite3_finalize(stmt);
+                    fprintf(stderr,
+                        "[DB] 学号验证失败: 输入=%s, 数据库=%s\n",
+                        student_id, db_student_id ? db_student_id : "(null)");
+                    return STATUS_INVALID_PARAM;  /* 学号不匹配 */
+                }
+            } else {
+                /* 发布者没有填写学号信息，无法核对 */
+                sqlite3_finalize(stmt);
+                fprintf(stderr,
+                    "[DB] 学号验证失败: 发布者(user_id=%d)未填写学号信息\n",
+                    book_owner_id);
+                return STATUS_INVALID_PARAM;
+            }
+            sqlite3_finalize(stmt);
+        } else {
+            return STATUS_DB_ERROR;
+        }
+    }
+
+    char upsql[256];
+    snprintf(upsql, sizeof(upsql),
              "UPDATE books SET status = %d WHERE id=%d;",
              BOOK_STATUS_DELISTED, book_id);
-    int ret = db_exec_simple(sql);
+    int ret = db_exec_simple(upsql);
 
     /* 同步更新缓存 */
     if (ret == STATUS_OK && cached)
         cached->status = BOOK_STATUS_DELISTED;
 
+    /* 自动同步数据文件 */
+    if (ret == STATUS_OK) save_books_to_file(g_book_cache, DATA_FILE);
     return ret;
 }
 

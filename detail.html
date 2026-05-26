@@ -86,6 +86,37 @@
         .modal-btn:active {
             opacity: 0.8;
         }
+        .modal-btn.cancel {
+            background: #999;
+            margin-right: 10px;
+        }
+        .modal-input-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+        .modal-input-group label {
+            display: block;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .modal-input-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        .modal-input-group input:focus {
+            border-color: #667eea;
+        }
+        .modal-error {
+            color: #e74c3c;
+            font-size: 12px;
+            margin-top: 2px;
+            display: none;
+        }
 
         /* ========== 图书详情页样式 ========== */
         .detail-page {
@@ -328,82 +359,82 @@
         </div>
     </div>
 
+    <!-- 购买确认弹窗（第一次提醒） -->
+    <div class="modal-mask" id="purchaseConfirmModal">
+        <div class="modal-dialog" style="width: 320px;">
+            <div class="modal-title">📖 确认购买</div>
+            <div class="modal-content" id="purchaseConfirmContent" style="text-align: left;">
+            </div>
+            <div class="modal-input-group" id="buyerNameGroup">
+                <label>买家姓名</label>
+                <input type="text" id="buyerNameInput" placeholder="请输入您的姓名">
+                <div class="modal-error" id="buyerNameError"></div>
+            </div>
+            <div class="modal-input-group" id="buyerPhoneGroup">
+                <label>联系电话</label>
+                <input type="text" id="buyerPhoneInput" placeholder="请输入您的联系电话">
+                <div class="modal-error" id="buyerPhoneError"></div>
+            </div>
+            <div class="modal-input-group" id="buyerStudentIdGroup">
+                <label>学号</label>
+                <input type="text" id="buyerStudentIdInput" placeholder="请输入您的学号">
+                <div class="modal-error" id="buyerStudentIdError"></div>
+            </div>
+            <div style="margin-top: 15px;">
+                <button class="modal-btn cancel" id="purchaseCancelBtn">取消</button>
+                <button class="modal-btn" id="purchaseConfirmBtn">确认购买</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 二次确认弹窗 -->
+    <div class="modal-mask" id="secondConfirmModal">
+        <div class="modal-dialog">
+            <div class="modal-title">⚠️ 请再次确认</div>
+            <div class="modal-content" id="secondConfirmContent">
+                您确定要购买此书吗？<br>
+                购买后请主动联系卖家完成交易。
+            </div>
+            <button class="modal-btn cancel" id="secondCancelBtn">再想想</button>
+            <button class="modal-btn" id="secondConfirmBtn">确定购买</button>
+        </div>
+    </div>
+
     <script>
-        // ========== 模拟图书数据（初始数据，库存会被localStorage覆盖） ==========
-        const mockBooksList = [
-            {
-                id: 1,
-                name: '百年孤独',
-                author: '加西亚·马尔克斯',
-                category: '文学小说',
-                condition: '八成新',
-                price: 25.00,
-                stock: 3,
-                description: '魔幻现实主义文学代表作，讲述布恩迪亚家族七代人的传奇故事。这本书以马孔多小镇为背景，通过布恩迪亚家族的兴衰史，展现了拉丁美洲一个世纪的历史变迁。书中融合了现实与幻想，创造出一个充满奇迹的世界。',
-                seller_name: '书虫小李',
-                images: ['https://picsum.photos/400/560?random=1']
-            },
-            {
-                id: 2,
-                name: 'JavaScript高级程序设计（第4版）',
-                author: '马特·弗里斯比',
-                category: '科学技术',
-                condition: '九成新',
-                price: 55.00,
-                stock: 2,
-                description: '前端开发必备经典书籍，全面讲解JavaScript语言核心特性。本书从基础语法到高级应用，深入浅出地介绍了ES6+新特性、异步编程、DOM操作等内容，是前端开发者不可多得的学习资料。',
-                seller_name: '程序员小王',
-                images: ['https://picsum.photos/400/560?random=2']
-            },
-            {
-                id: 3,
-                name: '人类简史',
-                author: '尤瓦尔·赫拉利',
-                category: '人文社科',
-                condition: '七成新',
-                price: 30.00,
-                stock: 1,
-                description: '从认知革命到科学革命，梳理人类历史发展脉络。作者以独特的视角审视人类历史，探讨了农业革命、科学革命等重大历史事件对人类社会的深远影响。',
-                seller_name: '历史爱好者',
-                images: ['https://picsum.photos/400/560?random=3']
-            },
-            {
-                id: 4,
-                name: '经济学原理',
-                author: '曼昆',
-                category: '经济管理',
-                condition: '八五成新',
-                price: 45.00,
-                stock: 5,
-                description: '经济学入门经典教材，通俗易懂地讲解微观和宏观经济学原理。本书通过大量实例帮助读者理解经济学的思维方式，适合初学者系统学习经济学知识。',
-                seller_name: '经济学霸',
-                images: ['https://picsum.photos/400/560?random=4']
-            },
-            {
-                id: 5,
-                name: '高等数学（第七版）上册',
-                author: '同济大学数学系',
-                category: '教育考试',
-                condition: '六成新',
-                price: 15.00,
-                stock: 2,
-                description: '大学高数经典教材，适合考研复习使用。内容涵盖极限、导数、积分等核心知识点，配有丰富的习题和解答。',
-                seller_name: '考研党',
-                images: ['https://picsum.photos/400/560?random=5']
-            },
-            {
-                id: 6,
-                name: '活着',
-                author: '余华',
-                category: '文学小说',
-                condition: '九成新',
-                price: 18.00,
-                stock: 4,
-                description: '讲述一个人一生的故事，展现生命的坚韧与力量。主人公福贵经历了中国近现代史上的重大事件，在苦难中依然保持着对生活的热爱。',
-                seller_name: '文艺青年',
-                images: ['https://picsum.photos/400/560?random=6']
+        // ========== API基础路径 ==========
+        const DETAIL_API_BASE = 'http://localhost:8080';
+        let currentBookCache = null;  // 缓存当前图书数据
+
+        // ========== 从后端API获取图书详情 ==========
+        async function fetchBookDetail(bookId) {
+            try {
+                const response = await fetch(`${DETAIL_API_BASE}/api/books/${bookId}`);
+                const result = await response.json();
+                if (result.code === 200 && result.data) {
+                    currentBookCache = result.data;
+                    return result.data;
+                }
+                return null;
+            } catch (err) {
+                console.error('[Detail] 获取图书详情失败:', err);
+                return null;
             }
-        ];
+        }
+
+        // ========== 从后端API搜索图书 ==========
+        async function fetchBookByIdFromSearch(bookId) {
+            try {
+                const response = await fetch(`${DETAIL_API_BASE}/api/books/search?id=${bookId}`);
+                const result = await response.json();
+                if (result.code === 200 && result.data && result.data.length > 0) {
+                    return result.data[0];
+                }
+                return null;
+            } catch (err) {
+                console.error('[Detail] 搜索图书失败:', err);
+                return null;
+            }
+        }
 
         // ========== DOM元素缓存 ==========
         const toast = document.getElementById('toast');
@@ -530,44 +561,48 @@
             }
         }
 
-        // ========== 渲染详情页数据 ==========
-        function renderDetailPage() {
+        // ========== 渲染详情页数据（从后端API获取） ==========
+        async function renderDetailPage() {
             const bookId = getUrlParam('id');
             if (!bookId) {
                 showToast('图书ID不存在');
-                setTimeout(() => {
-                    window.location.href = 'goods.html';
-                }, 1500);
+                setTimeout(() => { window.location.href = 'goods.html'; }, 1500);
                 return;
             }
 
             currentBookId = parseInt(bookId);
 
-            // 查找对应图书
-            const book = mockBooksList.find(item => item.id === currentBookId);
+            // 优先从后端API获取图书详情
+            let book = await fetchBookDetail(currentBookId);
             if (!book) {
-                showToast('图书不存在');
-                setTimeout(() => {
-                    window.location.href = 'goods.html';
-                }, 1500);
+                // 降级：使用搜索接口
+                book = await fetchBookByIdFromSearch(currentBookId);
+            }
+
+            if (!book) {
+                showToast('图书不存在或后端服务未启动');
+                setTimeout(() => { window.location.href = 'goods.html'; }, 2000);
                 return;
             }
 
-            // 从localStorage同步真实库存
-            book.stock = getBookCurrentStock(currentBookId, book.stock);
+            // 从localStorage同步真实库存（本地补充）
+            const localStock = getBookCurrentStock(currentBookId, book.stock);
+            if (localStock !== book.stock) {
+                book.stock = localStock;
+            }
 
             // 填充基本信息
-            bookCover.src = book.images[0];
+            bookCover.src = book.image_url || book.images?.[0] || 'https://picsum.photos/400/560?random=' + book.id;
             bookCover.alt = book.name;
             detailBookName.textContent = book.name;
-            detailAuthor.textContent = `作者：${book.author}`;
-            detailPriceNum.textContent = `¥${book.price.toFixed(2)}`;
+            detailAuthor.textContent = `作者：${book.author || '未知'}`;
+            detailPriceNum.textContent = `¥${parseFloat(book.price).toFixed(2)}`;
             detailStock.textContent = `剩余 ${book.stock} 本`;
-            detailCategory.textContent = book.category;
-            detailCondition.textContent = book.condition;
-            detailDescContent.textContent = book.description;
-            sellerName.textContent = book.seller_name;
-            sellerAvatar.textContent = book.seller_name.charAt(0);
+            detailCategory.textContent = book.category || '未分类';
+            detailCondition.textContent = book.condition || '未标注';
+            detailDescContent.textContent = book.description || '暂无简介';
+            sellerName.textContent = book.seller_name || '匿名用户';
+            sellerAvatar.textContent = (book.seller_name || '书').charAt(0);
 
             // 更新购买按钮状态
             updateBuyButton(book);
@@ -606,8 +641,8 @@
                 return;
             }
 
-            // 查找图书并获取最新库存
-            const book = mockBooksList.find(item => item.id === currentBookId);
+            // 使用缓存的图书数据
+            const book = currentBookCache;
             if (!book) {
                 showToast('图书信息异常');
                 return;
@@ -621,56 +656,8 @@
                 return;
             }
 
-            if (!confirm(`确认购买《${book.name}》？\n价格：¥${book.price.toFixed(2)}`)) {
-                return;
-            }
-
-            // --- 执行购买 ---
-
-            // 1. 尝试调用后端API扣减库存
-            try {
-                const user = getCurrentUser();
-                if (user) {
-                    const response = await fetch('http://localhost:8080/api/purchase', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: parseInt(user.id), bookId: book.id })
-                    });
-                    const result = await response.json();
-                    if (result.code !== 200) {
-                        showToast(result.message || '购买失败');
-                        return;
-                    }
-                }
-            } catch (e) {
-                // 后端不可用时，使用本地localStorage模式
-                console.log('后端未连接，使用本地模式:', e.message);
-            }
-
-            // 2. 更新全局库存（localStorage）
-            book.stock--;
-            const inv = getGlobalInventory();
-            inv[currentBookId] = book.stock;
-            setGlobalInventory(inv);
-
-            // 3. 更新页面显示
-            detailStock.textContent = `剩余 ${book.stock} 本`;
-            updateBuyButton(book);
-
-            // 4. 记录购买（去重）
-            let purchasedBooks = JSON.parse(localStorage.getItem('purchased_books') || '[]');
-            const alreadyPurchased = purchasedBooks.find(b => b.id === book.id);
-            if (!alreadyPurchased) {
-                // 存储时带上当前库存快照
-                const purchasedEntry = Object.assign({}, book);
-                purchasedBooks.push(purchasedEntry);
-                localStorage.setItem('purchased_books', JSON.stringify(purchasedBooks));
-            }
-
-            // 5. 弹出卖家联系方式弹窗
-            const sellerQQ = getSellerQQ(book);
-            document.getElementById('modalQQ').textContent = sellerQQ;
-            document.getElementById('contactModal').classList.add('show');
+            // --- 弹出购买确认弹窗（第一次提醒） ---
+            showPurchaseConfirmModal(book);
         });
 
         // ========== 获取卖家QQ ==========
@@ -705,6 +692,190 @@
             if (e.target === document.getElementById('contactModal')) {
                 document.getElementById('contactModal').classList.remove('show');
             }
+        });
+
+        // ========== 购买确认弹窗逻辑 ==========
+        let pendingPurchaseBook = null;
+
+        function showPurchaseConfirmModal(book) {
+            pendingPurchaseBook = book;
+            // 填充图书信息
+            const content = document.getElementById('purchaseConfirmContent');
+            content.innerHTML = `
+                <p><strong>书名：</strong>${book.name}</p>
+                <p><strong>作者：</strong>${book.author}</p>
+                <p><strong>价格：</strong><span style="color:#ff4400;font-weight:bold;">¥${book.price.toFixed(2)}</span></p>
+                <p style="margin-top: 8px; color: #e67e22; font-size: 13px;">⚠ 请确认以上信息无误后，填写您的联系方式</p>
+            `;
+
+            // 预填充（如果已登录）
+            const user = getCurrentUser();
+            const profiles = JSON.parse(localStorage.getItem('profiles') || '{}');
+            const profile = user ? profiles[user.id] : null;
+            if (profile) {
+                document.getElementById('buyerNameInput').value = profile.name || '';
+                document.getElementById('buyerStudentIdInput').value = profile.studentId || '';
+            }
+            document.getElementById('buyerPhoneInput').value = '';
+            hideAllErrors();
+
+            document.getElementById('purchaseConfirmModal').classList.add('show');
+        }
+
+        function hideAllErrors() {
+            ['buyerNameError', 'buyerPhoneError', 'buyerStudentIdError'].forEach(id => {
+                document.getElementById(id).style.display = 'none';
+            });
+        }
+
+        // 取消购买
+        document.getElementById('purchaseCancelBtn').addEventListener('click', () => {
+            document.getElementById('purchaseConfirmModal').classList.remove('show');
+            pendingPurchaseBook = null;
+        });
+
+        document.getElementById('purchaseConfirmModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('purchaseConfirmModal')) {
+                document.getElementById('purchaseConfirmModal').classList.remove('show');
+                pendingPurchaseBook = null;
+            }
+        });
+
+        // 第一次确认 → 弹出二次确认
+        document.getElementById('purchaseConfirmBtn').addEventListener('click', () => {
+            // 验证输入
+            hideAllErrors();
+            let hasError = false;
+            const buyerName = document.getElementById('buyerNameInput').value.trim();
+            const buyerPhone = document.getElementById('buyerPhoneInput').value.trim();
+            const buyerStudentId = document.getElementById('buyerStudentIdInput').value.trim();
+
+            if (!buyerName) {
+                document.getElementById('buyerNameError').textContent = '请输入姓名';
+                document.getElementById('buyerNameError').style.display = 'block';
+                hasError = true;
+            }
+            if (!buyerPhone) {
+                document.getElementById('buyerPhoneError').textContent = '请输入联系电话';
+                document.getElementById('buyerPhoneError').style.display = 'block';
+                hasError = true;
+            }
+            if (!buyerStudentId) {
+                document.getElementById('buyerStudentIdError').textContent = '请输入学号';
+                document.getElementById('buyerStudentIdError').style.display = 'block';
+                hasError = true;
+            }
+            if (hasError) return;
+
+            // 隐藏第一次确认弹窗，显示二次确认
+            document.getElementById('purchaseConfirmModal').classList.remove('show');
+            // 更新二次确认内容
+            const book = pendingPurchaseBook;
+            document.getElementById('secondConfirmContent').innerHTML = `
+                <p>您确定要购买《<strong>${book.name}</strong>》吗？</p>
+                <p style="margin-top: 8px;">价格：<strong style="color:#ff4400;">¥${book.price.toFixed(2)}</strong></p>
+                <p style="margin-top: 8px; font-size: 13px; color: #e67e22;">
+                    ⚠ 购买后请主动联系卖家完成线下交易<br>
+                    请确认信息无误
+                </p>
+            `;
+            document.getElementById('secondConfirmModal').classList.add('show');
+        });
+
+        // 二次确认取消
+        document.getElementById('secondCancelBtn').addEventListener('click', () => {
+            document.getElementById('secondConfirmModal').classList.remove('show');
+            // 回到第一次确认弹窗
+            document.getElementById('purchaseConfirmModal').classList.add('show');
+        });
+
+        document.getElementById('secondConfirmModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('secondConfirmModal')) {
+                document.getElementById('secondConfirmModal').classList.remove('show');
+                document.getElementById('purchaseConfirmModal').classList.add('show');
+            }
+        });
+
+        // 二次确认通过 → 执行购买
+        document.getElementById('secondConfirmBtn').addEventListener('click', async () => {
+            document.getElementById('secondConfirmModal').classList.remove('show');
+            const book = pendingPurchaseBook;
+            if (!book) return;
+
+            const buyerName = document.getElementById('buyerNameInput').value.trim();
+            const buyerPhone = document.getElementById('buyerPhoneInput').value.trim();
+            const buyerStudentId = document.getElementById('buyerStudentIdInput').value.trim();
+            const purchaseTime = new Date().toLocaleString('zh-CN');
+
+            // --- 执行购买 ---
+
+            // 1. 尝试调用后端API扣减库存
+            let backendOk = false;
+            try {
+                const user = getCurrentUser();
+                if (user) {
+                    const response = await fetch('http://localhost:8080/api/purchase', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: parseInt(user.id), bookId: book.id })
+                    });
+                    const result = await response.json();
+                    if (result.code === 200) {
+                        backendOk = true;
+                    } else {
+                        // 后端返回错误（如未找到图书）时降级到本地模式
+                        console.log('后端返回错误，降级到本地模式:', result.message);
+                    }
+                }
+            } catch (e) {
+                // 后端不可用时，使用本地localStorage模式
+                console.log('后端未连接，使用本地模式:', e.message);
+            }
+
+            // 2. 更新全局库存（localStorage）
+            book.stock--;
+            const inv = getGlobalInventory();
+            inv[currentBookId] = book.stock;
+            setGlobalInventory(inv);
+
+            // 3. 更新页面显示
+            detailStock.textContent = `剩余 ${book.stock} 本`;
+            updateBuyButton(book);
+
+            // 4. 记录购买信息（含买家信息和购买时间）
+            let purchasedBooks = JSON.parse(localStorage.getItem('purchased_books') || '[]');
+            const alreadyPurchased = purchasedBooks.find(b => b.id === book.id);
+            if (!alreadyPurchased) {
+                const purchasedEntry = Object.assign({}, book, {
+                    buyerName: buyerName,
+                    buyerPhone: buyerPhone,
+                    buyerStudentId: buyerStudentId,
+                    purchaseTime: purchaseTime
+                });
+                purchasedBooks.push(purchasedEntry);
+                localStorage.setItem('purchased_books', JSON.stringify(purchasedBooks));
+            }
+
+            // 5. 保存购买记录到专门的购买日志
+            let purchaseLog = JSON.parse(localStorage.getItem('purchase_log') || '[]');
+            purchaseLog.push({
+                bookId: book.id,
+                bookName: book.name,
+                price: book.price,
+                sellerName: book.seller_name,
+                buyerName: buyerName,
+                buyerPhone: buyerPhone,
+                buyerStudentId: buyerStudentId,
+                purchaseTime: purchaseTime
+            });
+            localStorage.setItem('purchase_log', JSON.stringify(purchaseLog));
+
+            // 6. 弹出卖家联系方式弹窗
+            const sellerQQ = getSellerQQ(book);
+            document.getElementById('modalQQ').textContent = sellerQQ;
+            document.getElementById('contactModal').classList.add('show');
+
+            pendingPurchaseBook = null;
         });
 
         // ========== 页面初始化 ==========

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <winsock2.h>
 #include <windows.h>
 #include "database.h"
@@ -214,10 +215,12 @@ static char* handle_login(const char *body) {
     char *res = (char*)malloc(512);
     User *user = NULL;
     int rc = login_user(body, &user);
-    if (rc == STATUS_OK) {
+    if (rc == STATUS_OK || rc == STATUS_CREATED) {
+        /* STATUS_OK: 已有用户验证通过；STATUS_CREATED: 新用户自动注册 */
         snprintf(res, 512,
-                 "{\"code\": 200, \"message\": \"登录成功\", "
+                 "{\"code\": 200, \"message\": \"%s\", "
                  "\"data\": {\"id\": %d, \"username\": \"%s\", \"isProfileComplete\": %d}}",
+                 rc == STATUS_CREATED ? "注册并登录成功" : "登录成功",
                  user->id, user->username, user->is_profile_complete);
         free(user);
     } else {
@@ -283,8 +286,8 @@ static char* handle_purchase(const char *body) {
 /* 下架图书 */
 static char* handle_delist(const char *body) {
     char *res = (char*)malloc(256);
-    char uid_str[16] = {0}, bid_str[16] = {0};
-    /* body 格式: {"userId":1, "bookId":5} 或 bookId 从路径中获取 */
+    char uid_str[16] = {0}, bid_str[16] = {0}, student_id[32] = {0};
+    /* body 格式: {"userId":1, "bookId":5, "studentId":"2021001"} */
     if (body && strstr(body, "userId")) {
         /* 从 JSON body 解析 */
         const char *pos;
@@ -302,6 +305,14 @@ static char* handle_delist(const char *body) {
             while (*pos >= '0' && *pos <= '9' && i < 15) bid_str[i++] = *pos++;
             bid_str[i] = '\0';
         }
+        /* 提取学号（用于核对发布者身份） */
+        pos = strstr(body, "\"studentId\":\"");
+        if (pos) {
+            pos += 14;
+            int i = 0;
+            while (*pos && *pos != '"' && i < 31) student_id[i++] = *pos++;
+            student_id[i] = '\0';
+        }
     }
     int user_id = atoi(uid_str);
     int book_id = atoi(bid_str);
@@ -309,13 +320,13 @@ static char* handle_delist(const char *body) {
         snprintf(res, 256, "{\"code\": 400, \"message\": \"参数不完整，需要userId和bookId\"}");
         return res;
     }
-    int rc = delist_book(book_id, user_id);
+    int rc = delist_book(book_id, user_id, student_id);
     snprintf(res, 256, "{\"code\": %d, \"message\": \"%s\"}",
              rc == STATUS_OK ? 200 :
              rc == STATUS_INVALID_PARAM ? 403 :
              rc == STATUS_NOT_FOUND ? 404 : 500,
              rc == STATUS_OK ? "下架成功" :
-             rc == STATUS_INVALID_PARAM ? "无权操作此图书" :
+             rc == STATUS_INVALID_PARAM ? "学号验证失败，无权操作此图书" :
              rc == STATUS_NOT_FOUND ? "图书不在售，无法下架" : "下架失败");
     return res;
 }
@@ -418,7 +429,8 @@ static void do_book_search(SOCKET sock, const char *request) {
 
     char keyword[128] = {0}, author[64] = {0}, isbn[32] = {0};
     char min_price_str[32] = {0}, max_price_str[32] = {0};
-    char seller_id_str[16] = {0}, status_str[16] = {0}, category[64] = {0};
+    char seller_id_str[16] = {0}, seller_student_id[32] = {0};
+    char status_str[16] = {0}, category[64] = {0};
 
     extract_query_param(query, "keyword",   keyword,   sizeof(keyword));
     extract_query_param(query, "author",    author,    sizeof(author));
@@ -426,6 +438,7 @@ static void do_book_search(SOCKET sock, const char *request) {
     extract_query_param(query, "minPrice",  min_price_str, sizeof(min_price_str));
     extract_query_param(query, "maxPrice",  max_price_str, sizeof(max_price_str));
     extract_query_param(query, "sellerId",  seller_id_str, sizeof(seller_id_str));
+    extract_query_param(query, "sellerStudentId", seller_student_id, sizeof(seller_student_id));
     extract_query_param(query, "status",    status_str, sizeof(status_str));
     extract_query_param(query, "category",  category,  sizeof(category));
 
@@ -437,7 +450,7 @@ static void do_book_search(SOCKET sock, const char *request) {
     Book *head = NULL;
     int count = 0;
     search_books(keyword, author, isbn, min_price, max_price,
-                 seller_id, status, category, &head, &count);
+                 seller_id, seller_student_id, status, category, &head, &count);
     char *json = book_list_to_json(head, count);
     send_json(sock, json ? json : "{\"code\": 500, \"message\": \"内存不足\"}");
     free(json);
@@ -446,11 +459,28 @@ static void do_book_search(SOCKET sock, const char *request) {
 
 /* 下架图书（从URL路径解析） */
 static void do_delist_from_url(SOCKET sock, const char *request, const char *path) {
-    /* 路径格式: /api/books/:id/delist */
+    /* 路径格式: /api/books/:id/delist?userId=1&studentId=2021001 */
     char *res = (char*)malloc(256);
     /* 提取 book_id */
     int book_id = atoi(path + 11);
     int user_id = url_get_userid(request);
+
+    /* 从 URL 查询参数中提取学号 */
+    const char *query = strchr(request, '?');
+    char student_id[32] = {0};
+    if (query) {
+        /* 简单提取 studentId 参数 */
+        const char *pos = strstr(query, "studentId=");
+        if (pos) {
+            pos += 10; /* 跳过 "studentId=" */
+            int i = 0;
+            while (*pos && *pos != '&' && *pos != ' ' && *pos != '\r'
+                   && *pos != '\n' && i < 31) {
+                student_id[i++] = *pos++;
+            }
+            student_id[i] = '\0';
+        }
+    }
 
     if (book_id <= 0 || user_id <= 0) {
         snprintf(res, 256, "{\"code\": 400, \"message\": \"参数不完整\"}");
@@ -459,13 +489,13 @@ static void do_delist_from_url(SOCKET sock, const char *request, const char *pat
         return;
     }
 
-    int rc = delist_book(book_id, user_id);
+    int rc = delist_book(book_id, user_id, student_id);
     snprintf(res, 256, "{\"code\": %d, \"message\": \"%s\"}",
              rc == STATUS_OK ? 200 :
              rc == STATUS_INVALID_PARAM ? 403 :
              rc == STATUS_NOT_FOUND ? 404 : 500,
              rc == STATUS_OK ? "下架成功" :
-             rc == STATUS_INVALID_PARAM ? "无权操作此图书" :
+             rc == STATUS_INVALID_PARAM ? "学号验证失败，无权操作此图书" :
              rc == STATUS_NOT_FOUND ? "图书不在售，无法下架" : "下架失败");
     send_json(sock, res);
     free(res);
@@ -652,10 +682,26 @@ static void handle_request(SOCKET sock, const char *request) {
 }
 
 /*==========================================================================
+ * Ctrl+C 信号处理 —— 优雅退出
+ *==========================================================================*/
+static BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) {
+    if (ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_CLOSE_EVENT) {
+        printf("\n[Server] 正在关闭服务器...\n");
+        close_database();
+        printf("[Server] 数据已保存，服务器已安全退出\n");
+        ExitProcess(0);
+    }
+    return TRUE;
+}
+
+/*==========================================================================
  * 主函数
  *==========================================================================*/
 
 int main(void) {
+    /* 注册优雅退出处理 */
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
         fprintf(stderr, "WSAStartup 失败!\n");
@@ -702,7 +748,7 @@ int main(void) {
     printf("  ╠══════════════════════════════════════════════════╣\n");
     printf("  ║  服务器已启动                                      ║\n");
     printf("  ║  地址: http://localhost:%d                        ║\n", PORT);
-    printf("  ║  按 Ctrl+C 停止服务器                              ║\n");
+    printf("  ║  按 Ctrl+C 安全退出（自动保存数据）                 ║\n");
     printf("  ╚══════════════════════════════════════════════════╝\n");
     printf("\n");
 

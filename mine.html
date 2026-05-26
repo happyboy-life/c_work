@@ -280,6 +280,37 @@
         .modal-btn:active {
             opacity: 0.8;
         }
+        .modal-btn.cancel {
+            background: #999;
+            margin-right: 10px;
+        }
+        .modal-input-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+        .modal-input-group label {
+            display: block;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .modal-input-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        .modal-input-group input:focus {
+            border-color: #667eea;
+        }
+        .modal-error {
+            color: #e74c3c;
+            font-size: 12px;
+            margin-top: 2px;
+            display: none;
+        }
 
         /* 购买列表底部按钮 */
         .contact-seller-bar {
@@ -455,16 +486,38 @@
         </div>
     </div>
 
+    <!-- 学号验证弹窗（下架图书时核对发布者身份） -->
+    <div class="modal-mask" id="delistVerifyModal">
+        <div class="modal-dialog" style="width: 320px;">
+            <div class="modal-title">🔐 身份验证</div>
+            <div class="modal-content" id="delistVerifyContent">
+                <p style="color:#e67e22; font-size:13px; margin-bottom:8px;">⚠ 下架图书需要验证发布者身份</p>
+                <p>请输入您的<strong>学号</strong>以确认身份</p>
+            </div>
+            <div class="modal-input-group">
+                <label>学号</label>
+                <input type="text" id="delistStudentIdInput" placeholder="请输入您的学号">
+                <div class="modal-error" id="delistStudentIdError"></div>
+            </div>
+            <div style="margin-top: 15px;">
+                <button class="modal-btn cancel" id="delistCancelBtn">取消</button>
+                <button class="modal-btn" id="delistConfirmBtn">确认下架</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 购买信息详情弹窗（我购买的列表用） -->
+    <div class="modal-mask" id="purchaseDetailModal">
+        <div class="modal-dialog" style="width: 320px; text-align: left;">
+            <div class="modal-title">📋 购买详情</div>
+            <div class="modal-content" id="purchaseDetailContent" style="text-align: left;"></div>
+            <button class="modal-btn" id="purchaseDetailCloseBtn">关闭</button>
+        </div>
+    </div>
+
     <script>
-        // ========== 模拟图书数据 ==========
-        const mockBooksList = [
-            { id: 1, name: '百年孤独', author: '加西亚·马尔克斯', category: '文学小说', condition: '八成新', price: 25.00, stock: 3, images: ['https://picsum.photos/200/280?random=1'] },
-            { id: 2, name: 'JavaScript高级程序设计', author: '马特·弗里斯比', category: '科学技术', condition: '九成新', price: 55.00, stock: 2, images: ['https://picsum.photos/200/280?random=2'] },
-            { id: 3, name: '人类简史', author: '尤瓦尔·赫拉利', category: '人文社科', condition: '七成新', price: 30.00, stock: 1, images: ['https://picsum.photos/200/280?random=3'] },
-            { id: 4, name: '经济学原理', author: '曼昆', category: '经济管理', condition: '八五成新', price: 45.00, stock: 5, images: ['https://picsum.photos/200/280?random=4'] },
-            { id: 5, name: '高等数学', author: '同济大学数学系', category: '教育考试', condition: '六成新', price: 15.00, stock: 2, images: ['https://picsum.photos/200/280?random=5'] },
-            { id: 6, name: '活着', author: '余华', category: '文学小说', condition: '九成新', price: 18.00, stock: 4, images: ['https://picsum.photos/200/280?random=6'] }
-        ];
+        // ========== API基础路径 ==========
+        const MINE_API_BASE = 'http://localhost:8080';
 
         // ========== DOM元素 ==========
         const toast = document.getElementById('toast');
@@ -494,7 +547,7 @@
         function getCurrentUser() {
             const currentUserId = localStorage.getItem('currentUserId');
             if (!currentUserId) return null;
-            
+
             const users = JSON.parse(localStorage.getItem('users') || '{}');
             return users[currentUserId] ? { id: currentUserId, ...users[currentUserId] } : null;
         }
@@ -503,7 +556,7 @@
         function getUserProfile() {
             const user = getCurrentUser();
             if (!user) return null;
-            
+
             const profiles = JSON.parse(localStorage.getItem('profiles') || '{}');
             return profiles[user.id] || null;
         }
@@ -617,12 +670,12 @@
                         ${showActions ? `
                         <div class="book-list-actions">
                             <button class="book-list-btn btn-view" onclick="event.stopPropagation(); viewBook(${book.id})">查看详情</button>
-                            <button class="book-list-btn btn-delete" onclick="event.stopPropagation(); deleteBook(${book.id})">删除</button>
+                            <button class="book-list-btn btn-delete" onclick="event.stopPropagation(); delistBook(${book.id})">下架</button>
                         </div>
                         ` : ''}
                         ${showContact ? `
                         <div class="contact-seller-bar">
-                            <button class="contact-seller-btn" onclick="event.stopPropagation();">请联系卖家</button>
+                            <button class="contact-seller-btn" onclick="event.stopPropagation(); showPurchaseDetail(${book.id})">查看购买详情</button>
                         </div>
                         ` : ''}
                     </div>
@@ -634,8 +687,25 @@
             return `<div class="empty-state"><div class="empty-icon">${icon}</div><div class="empty-text">${text}</div></div>`;
         }
 
+        // ========== 从后端API获取收藏图书详情 ==========
+        async function fetchCollectionBookDetails(bookIds) {
+            if (bookIds.length === 0) return [];
+            try {
+                // 使用搜索接口批量获取
+                const response = await fetch(`${MINE_API_BASE}/api/books/search?`);
+                const result = await response.json();
+                if (result.code === 200 && result.data) {
+                    const idSet = new Set(bookIds);
+                    return result.data.filter(book => idSet.has(book.id));
+                }
+            } catch (err) {
+                console.error('[Mine] 获取收藏图书信息失败:', err);
+            }
+            return [];
+        }
+
         // ========== 渲染列表 ==========
-        function renderCollectList() {
+        async function renderCollectList() {
             const user = getCurrentUser();
             if (!user || !user.isProfileComplete) return;
 
@@ -645,10 +715,18 @@
                 return;
             }
 
+            // 从后端获取收藏图书详情
+            collectList.innerHTML = renderEmptyState('⏳', '加载中...');
+            const books = await fetchCollectionBookDetails(collectIds);
+
+            if (books.length === 0) {
+                collectList.innerHTML = renderEmptyState('⭐', '暂无收藏的图书\n去首页逛逛吧~');
+                return;
+            }
+
             let html = '';
-            collectIds.forEach(id => {
-                const book = mockBooksList.find(b => b.id === id);
-                if (book) html += renderBookCard(book);
+            books.forEach(book => {
+                html += renderBookCard(book);
             });
             collectList.innerHTML = html;
 
@@ -698,19 +776,13 @@
             });
             purchasedList.innerHTML = html;
 
-            // 绑定"请联系卖家"按钮事件
+            // 绑定"查看购买详情"按钮事件
             purchasedList.querySelectorAll('.contact-seller-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const bookCard = btn.closest('.book-list-item');
                     const bookId = parseInt(bookCard.dataset.id);
-                    const purchasedBooks = JSON.parse(localStorage.getItem('purchased_books') || '[]');
-                    const book = purchasedBooks.find(b => b.id === bookId);
-                    if (book) {
-                        const sellerQQ = getSellerQQForBook(book);
-                        document.getElementById('modalQQ').textContent = sellerQQ;
-                        document.getElementById('contactModal').classList.add('show');
-                    }
+                    showPurchaseDetail(bookId);
                 });
             });
 
@@ -722,18 +794,118 @@
             });
         }
 
+        // ========== 显示购买详情（含买家信息和购买时间） ==========
+        function showPurchaseDetail(bookId) {
+            const purchasedBooks = JSON.parse(localStorage.getItem('purchased_books') || '[]');
+            const purchaseLog = JSON.parse(localStorage.getItem('purchase_log') || '[]');
+
+            const book = purchasedBooks.find(b => b.id === bookId);
+            const logEntry = purchaseLog.reverse().find(e => e.bookId === bookId);
+
+            let html = '';
+            if (book) {
+                html += `<p><strong>书名：</strong>${book.name}</p>`;
+                html += `<p><strong>价格：</strong><span style="color:#ff4400;">¥${book.price.toFixed(2)}</span></p>`;
+                html += `<p><strong>卖家：</strong>${book.seller_name || '未知'}</p>`;
+                if (logEntry) {
+                    html += `<hr style="margin:8px 0; border-color:#eee;">`;
+                    html += `<p><strong>买家姓名：</strong>${logEntry.buyerName || '--'}</p>`;
+                    html += `<p><strong>买家电话：</strong>${logEntry.buyerPhone || '--'}</p>`;
+                    html += `<p><strong>买家学号：</strong>${logEntry.buyerStudentId || '--'}</p>`;
+                    html += `<p><strong>购买时间：</strong>${logEntry.purchaseTime || '--'}</p>`;
+                }
+                const sellerQQ = getSellerQQForBook(book);
+                html += `<hr style="margin:8px 0; border-color:#eee;">`;
+                html += `<p><strong>卖家QQ：</strong>${sellerQQ}</p>`;
+            } else {
+                html = '<p>暂无购买记录</p>';
+            }
+
+            document.getElementById('purchaseDetailContent').innerHTML = html;
+            document.getElementById('purchaseDetailModal').classList.add('show');
+        }
+
+        // ========== 下架图书（含学号验证） ==========
+        window.delistBook = function(bookId) {
+            const profile = getUserProfile();
+            const currentStudentId = profile ? profile.studentId : '';
+
+            // 弹出学号验证弹窗
+            document.getElementById('delistStudentIdInput').value = currentStudentId || '';
+            document.getElementById('delistStudentIdError').style.display = 'none';
+
+            // 存储待下架的图书ID
+            document.getElementById('delistVerifyModal').dataset.pendingBookId = bookId;
+            document.getElementById('delistVerifyModal').classList.add('show');
+        };
+
+        // ========== 学号验证弹窗逻辑 ==========
+        document.getElementById('delistCancelBtn').addEventListener('click', () => {
+            document.getElementById('delistVerifyModal').classList.remove('show');
+        });
+
+        document.getElementById('delistVerifyModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('delistVerifyModal')) {
+                document.getElementById('delistVerifyModal').classList.remove('show');
+            }
+        });
+
+        document.getElementById('delistConfirmBtn').addEventListener('click', () => {
+            const inputStudentId = document.getElementById('delistStudentIdInput').value.trim();
+            const profile = getUserProfile();
+            const realStudentId = profile ? profile.studentId : '';
+
+            if (!inputStudentId) {
+                document.getElementById('delistStudentIdError').textContent = '请输入学号';
+                document.getElementById('delistStudentIdError').style.display = 'block';
+                return;
+            }
+
+            if (inputStudentId !== realStudentId) {
+                document.getElementById('delistStudentIdError').textContent = '学号验证失败，与当前登录用户学号不匹配';
+                document.getElementById('delistStudentIdError').style.display = 'block';
+                return;
+            }
+
+            // 学号验证通过，执行下架
+            document.getElementById('delistVerifyModal').classList.remove('show');
+            const bookId = parseInt(document.getElementById('delistVerifyModal').dataset.pendingBookId);
+            executeDelist(bookId);
+        });
+
+        function executeDelist(bookId) {
+            let publishedBooks = JSON.parse(localStorage.getItem('published_books') || '[]');
+            publishedBooks = publishedBooks.filter(book => book.id !== bookId);
+            localStorage.setItem('published_books', JSON.stringify(publishedBooks));
+
+            // 同时更新全局库存（标记为已下架）
+            const inv = JSON.parse(localStorage.getItem('books_inventory') || '{}');
+            inv[bookId] = 0;
+            localStorage.setItem('books_inventory', JSON.stringify(inv));
+
+            // 尝试调用后端API
+            const user = getCurrentUser();
+            if (user) {
+                fetch('http://localhost:8080/api/purchase', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: parseInt(user.id), bookId: bookId })
+                }).catch(() => {});
+            }
+
+            showToast('图书已成功下架');
+            renderPublishedList();
+        }
+
         // ========== 全局函数 ==========
         window.viewBook = function(bookId) {
             window.location.href = `detail.html?id=${bookId}`;
         };
 
+        // 保留旧的deleteBook函数向后兼容（直接删除，不走学号验证）
         window.deleteBook = function(bookId) {
-            if (!confirm('确定要删除这本图书吗？')) return;
-            let publishedBooks = JSON.parse(localStorage.getItem('published_books') || '[]');
-            publishedBooks = publishedBooks.filter(book => book.id !== bookId);
-            localStorage.setItem('published_books', JSON.stringify(publishedBooks));
-            showToast('已删除');
-            renderPublishedList();
+            // 改为调用学号验证流程
+            window.delistBook(bookId);
         };
 
         // ========== Tab切换 ==========
@@ -764,17 +936,14 @@
         mineCard.addEventListener('click', () => {
             const user = getCurrentUser();
             if (!user) {
-                // 未登录，跳转登录页
                 window.location.href = 'login.html';
             } else {
-                // 已登录，跳转个人资料页
                 window.location.href = 'mydata.html';
             }
         });
 
         // ========== 获取卖家QQ ==========
         function getSellerQQForBook(book) {
-            // 从users中按seller_name匹配获取QQ
             const users = JSON.parse(localStorage.getItem('users') || '{}');
             const profiles = JSON.parse(localStorage.getItem('profiles') || '{}');
             for (const uid in users) {
@@ -797,6 +966,16 @@
             }
         });
 
+        document.getElementById('purchaseDetailCloseBtn').addEventListener('click', () => {
+            document.getElementById('purchaseDetailModal').classList.remove('show');
+        });
+
+        document.getElementById('purchaseDetailModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('purchaseDetailModal')) {
+                document.getElementById('purchaseDetailModal').classList.remove('show');
+            }
+        });
+
         // ========== Tab栏跳转 ==========
         tabItems.forEach(item => {
             item.addEventListener('click', () => {
@@ -811,8 +990,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             renderUserCard();
             renderStatusMessage();
-            
-            // 如果资料完善，渲染列表
+
             if (checkLoginStatus() && isProfileComplete()) {
                 renderCollectList();
             }
